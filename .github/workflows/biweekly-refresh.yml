@@ -1,0 +1,38 @@
+name: biweekly-tell-refresh
+on:
+  schedule:
+    - cron: "0 9 1,15 * *"   # 09:00 UTC on the 1st and 15th, the closest cron gets to every two weeks
+  workflow_dispatch: {}
+  push:
+    branches: [main]
+jobs:
+  regression:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: "20" }
+      - run: npm install
+      - run: bash tests/run_all.sh
+  reminder:
+    if: github.event_name == 'schedule'
+    needs: regression
+    runs-on: ubuntu-latest
+    permissions: { issues: write }
+    steps:
+      - uses: actions/github-script@v7
+        with:
+          script: |
+            await github.rest.issues.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              title: `Tell refresh ${new Date().toISOString().slice(0,10)}`,
+              body: [
+                "Biweekly maintenance loop:",
+                "1. Generate 3 fresh samples from current models (one blog post, one technical explainer, one email).",
+                "2. Run each through sapienize.html. Note phrasing that reads AI but went unflagged.",
+                "3. Add new entries to SAPIENIZE_TELLS in src/engine.js and skill/sapienize/references/tells.md.",
+                "4. Retire entries current models no longer produce.",
+                "5. python3 build.py && bash tests/run_all.sh, then commit and tag."
+              ].join("\n")
+            });

@@ -1,0 +1,807 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Sapienize: Text Forensics and Voice Restoration</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0A0C11;
+    --surface: #10141C;
+    --surface-2: #161B26;
+    --line: #232A38;
+    --ink: #E9E6DE;
+    --muted: #8A92A3;
+    --sev3: #E5654F;
+    --sev2: #E0A84F;
+    --sev1: #7D8BBE;
+    --good: #4E82E6;
+    --mono: "DM Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+    --sans: "DM Sans", -apple-system, Segoe UI, sans-serif;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html { background: var(--bg); }
+  body { font-family: var(--sans); color: var(--ink); background: var(--bg); line-height: 1.55; -webkit-font-smoothing: antialiased; }
+  .wrap { max-width: 1240px; margin: 0 auto; padding: 28px 24px 80px; }
+
+  header { display: flex; align-items: baseline; justify-content: space-between; gap: 16px; flex-wrap: wrap; padding-bottom: 20px; border-bottom: 1px solid var(--line); }
+  .brand { display: flex; align-items: baseline; gap: 14px; }
+  .wordmark { font-weight: 700; font-size: 26px; letter-spacing: 0.14em; }
+  .wordmark .flip { color: var(--good); }
+  .eyebrow { font-family: var(--mono); font-size: 11px; letter-spacing: 0.18em; color: var(--muted); text-transform: uppercase; }
+  .tagline { font-family: var(--mono); font-size: 12px; color: var(--muted); }
+
+  .grid { display: grid; grid-template-columns: minmax(340px, 46%) 1fr; gap: 24px; margin-top: 24px; align-items: start; }
+  @media (max-width: 900px) { .grid { grid-template-columns: 1fr; } }
+
+  .panel { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 18px; }
+  .panel h2 { font-size: 13px; font-family: var(--mono); font-weight: 500; letter-spacing: 0.16em; text-transform: uppercase; color: var(--muted); margin-bottom: 12px; }
+
+  textarea { width: 100%; min-height: 320px; resize: vertical; background: var(--bg); color: var(--ink); border: 1px solid var(--line); border-radius: 8px; padding: 14px; font-family: var(--sans); font-size: 15px; line-height: 1.6; }
+  textarea:focus, button:focus-visible, input:focus { outline: 2px solid var(--good); outline-offset: 2px; }
+  textarea.small { min-height: 100px; font-size: 14px; }
+
+  .bar { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 12px; flex-wrap: wrap; }
+  .count { font-family: var(--mono); font-size: 12px; color: var(--muted); }
+  button { font-family: var(--sans); font-weight: 600; font-size: 14px; border: none; border-radius: 8px; padding: 10px 20px; cursor: pointer; }
+  .primary { background: var(--good); color: #F2F5FB; }
+  .primary:hover { filter: brightness(1.08); }
+  .ghost { background: transparent; color: var(--ink); border: 1px solid var(--line); }
+  .ghost:hover { border-color: var(--muted); }
+  button:disabled { opacity: 0.45; cursor: not-allowed; }
+
+  /* Score card */
+  .scorecard { display: flex; gap: 22px; align-items: center; flex-wrap: wrap; }
+  .dial { width: 132px; height: 132px; flex: 0 0 auto; }
+  .dial text { font-family: var(--mono); }
+  .band { font-size: 20px; font-weight: 700; }
+  .bandnote { color: var(--muted); font-size: 14px; margin-top: 4px; max-width: 46ch; }
+  .metrics { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 10px; margin-top: 16px; }
+  .metric { background: var(--surface-2); border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; }
+  .metric .k { font-family: var(--mono); font-size: 10px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--muted); }
+  .metric .v { font-family: var(--mono); font-size: 18px; margin-top: 2px; }
+  .metric .hint { font-size: 11px; color: var(--muted); margin-top: 2px; }
+
+  /* Findings */
+  .finding { display: flex; gap: 10px; padding: 10px 0; border-bottom: 1px solid var(--line); align-items: flex-start; }
+  .finding:last-child { border-bottom: none; }
+  .chip { flex: 0 0 auto; font-family: var(--mono); font-size: 10px; letter-spacing: 0.08em; padding: 3px 8px; border-radius: 99px; margin-top: 2px; text-transform: uppercase; }
+  .chip.s3 { background: rgba(229,101,79,0.16); color: var(--sev3); }
+  .chip.s2 { background: rgba(224,168,79,0.16); color: var(--sev2); }
+  .chip.s1 { background: rgba(125,139,190,0.18); color: var(--sev1); }
+  .finding .t { font-weight: 600; font-size: 14px; }
+  .finding .d { color: var(--muted); font-size: 13px; }
+  .tally { font-family: var(--mono); font-size: 12px; color: var(--muted); margin-left: auto; flex: 0 0 auto; }
+
+  /* Specimen */
+  .specimen { white-space: pre-wrap; font-size: 15px; line-height: 1.75; background: var(--bg); border: 1px solid var(--line); border-radius: 8px; padding: 16px; max-height: 460px; overflow: auto; }
+  mark { border-radius: 3px; padding: 0 2px; color: var(--ink); cursor: help; position: relative; background: transparent; }
+  mark.s3 { background: rgba(229,101,79,0.28); box-shadow: inset 0 -2px 0 var(--sev3); }
+  mark.s2 { background: rgba(224,168,79,0.24); box-shadow: inset 0 -2px 0 var(--sev2); }
+  mark.s1 { background: rgba(125,139,190,0.22); box-shadow: inset 0 -2px 0 var(--sev1); }
+  mark:hover::after, mark:focus::after { content: attr(data-tip); position: absolute; left: 0; bottom: calc(100% + 6px); z-index: 5; background: #0B0E14; border: 1px solid var(--line); color: var(--ink); font-size: 12px; font-family: var(--mono); line-height: 1.4; padding: 8px 10px; border-radius: 6px; width: max-content; max-width: 320px; white-space: normal; }
+
+  .legend { display: flex; gap: 16px; margin-top: 10px; font-family: var(--mono); font-size: 11px; color: var(--muted); flex-wrap: wrap; }
+  .dot { display: inline-block; width: 9px; height: 9px; border-radius: 2px; margin-right: 5px; vertical-align: baseline; }
+
+  /* Rewrite */
+  .voice-label { font-size: 13px; color: var(--muted); margin: 10px 0 6px; }
+  .status { font-family: var(--mono); font-size: 12px; color: var(--muted); margin-top: 10px; min-height: 18px; }
+  .status.err { color: var(--sev3); }
+  .result-head { display: flex; align-items: center; gap: 14px; margin: 14px 0 8px; flex-wrap: wrap; }
+  .delta { font-family: var(--mono); font-size: 13px; }
+  .delta .up { color: var(--good); }
+  .rewritten { white-space: pre-wrap; font-size: 15px; line-height: 1.7; background: var(--bg); border: 1px solid var(--line); border-radius: 8px; padding: 16px; max-height: 420px; overflow: auto; }
+
+  .empty { color: var(--muted); font-size: 14px; padding: 26px 8px; text-align: center; }
+  .stack > .panel { margin-bottom: 24px; }
+  footer { margin-top: 40px; border-top: 1px solid var(--line); padding-top: 16px; font-family: var(--mono); font-size: 11px; color: var(--muted); line-height: 1.8; }
+  .hidden { display: none; }
+  @media (prefers-reduced-motion: no-preference) {
+    .panel { transition: border-color 0.2s ease; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div class="brand">
+      <div class="wordmark">SAPIEN<span class="flip">IZE</span></div>
+      <div class="eyebrow">Text forensics · v1.1</div>
+    </div>
+    <div style="text-align:right;">
+      <div class="tagline">Find the machine accent in your draft. Restore your own voice.</div>
+      <div class="eyebrow" style="margin-top:4px;">Updated: July 2026</div>
+    </div>
+  </header>
+
+  <div class="grid">
+    <div class="stack">
+      <section class="panel">
+        <h2>Specimen intake</h2>
+        <textarea id="input" spellcheck="false" placeholder="Paste your draft. Nothing leaves this page during analysis; every check runs locally in your browser."></textarea>
+        <div class="bar">
+          <span class="count" id="incount">0 words</span>
+          <span>
+            <button class="ghost" id="loadSample" type="button">Load sample</button>
+            <button class="primary" id="analyzeBtn" type="button">Run forensics</button>
+          </span>
+        </div>
+      </section>
+
+      <section class="panel" id="rewritePanel">
+        <h2>Voice restoration</h2>
+        <div class="voice-label">Write as a persona. The persona sets register, rhythm, and spelling; it never invents facts, credentials, or anecdotes.</div>
+        <select id="persona" style="width:100%; background:var(--bg); color:var(--ink); border:1px solid var(--line); border-radius:8px; padding:10px 12px; font-family:var(--sans); font-size:14px;">
+          <option value="">No persona (neutral, your sample only)</option>
+          <option value="pm">Project manager, 52, California</option>
+          <option value="eng">Software engineer, 28, India</option>
+          <option value="law">Solicitor, 64, UK</option>
+          <option value="sci">Research scientist, 32, Florida</option>
+          <option value="auto">Automotive engineer, 41, Germany</option>
+          <option value="grad">College graduate, 24, California</option>
+          <option value="custom">Custom persona...</option>
+        </select>
+        <input type="text" id="personaCustom" class="hidden" spellcheck="false" placeholder="Describe the author: role, age, region, register. Example: retired teacher, 60, Texas, warm and plain-spoken." style="width:100%; margin-top:8px; background:var(--bg); color:var(--ink); border:1px solid var(--line); border-radius:8px; padding:10px 12px; font-family:var(--sans); font-size:14px;">
+        <div class="voice-label">Optional: paste 100 to 300 words you wrote yourself, no AI. The rewrite will match its rhythm and vocabulary. If you set both, your sample wins over the persona wherever they conflict.</div>
+        <textarea id="voice" class="small" spellcheck="false" placeholder="A Slack rant, an old blog paragraph, an email. Anything that sounds like you."></textarea>
+        <div class="bar">
+          <span class="count">Rewrites use Claude and keep your facts intact. Works per pass on drafts up to roughly 600 words; run longer pieces in sections.</span>
+          <span>
+            <button class="ghost" id="settingsBtn" type="button">API settings</button>
+            <button class="primary" id="rewriteBtn" type="button" disabled>Rewrite in my voice</button>
+          </span>
+        </div>
+        <div id="keyRow" class="hidden">
+          <div class="voice-label">Rewrite engine. Anthropic works keyless inside a Claude artifact; everywhere else, and for OpenAI or OpenRouter always, paste your own API key. Keys stay in memory for this tab only, never stored, sent only to the selected provider.</div>
+          <div style="display:grid; grid-template-columns: 1fr 1fr; gap:8px;">
+            <select id="provider" style="background:var(--bg); color:var(--ink); border:1px solid var(--line); border-radius:8px; padding:10px 12px; font-family:var(--sans); font-size:13px;">
+              <option value="anthropic">Anthropic</option>
+              <option value="openai">OpenAI</option>
+              <option value="openrouter">OpenRouter</option>
+            </select>
+            <input type="text" id="modelName" value="claude-sonnet-4-6" spellcheck="false" style="background:var(--bg); color:var(--ink); border:1px solid var(--line); border-radius:8px; padding:10px 12px; font-family:var(--mono); font-size:12px;">
+          </div>
+          <input type="password" id="apiKey" autocomplete="off" spellcheck="false" placeholder="sk-ant-..." style="width:100%; margin-top:8px; background:var(--bg); color:var(--ink); border:1px solid var(--line); border-radius:8px; padding:10px 12px; font-family:var(--mono); font-size:13px;">
+        </div>
+        <div class="status" id="rwStatus"></div>
+        <div id="rwResult" class="hidden">
+          <div class="result-head">
+            <strong>Restored draft</strong>
+            <span class="delta" id="rwDelta"></span>
+            <button class="ghost" id="copyBtn" type="button">Copy</button>
+            <button class="ghost" id="iterateBtn" type="button">Use as new specimen</button>
+          </div>
+          <div class="rewritten" id="rwText"></div>
+        </div>
+      </section>
+    </div>
+
+    <div class="stack">
+      <section class="panel">
+        <h2>Sapien score</h2>
+        <div id="scoreArea"><div class="empty">Run forensics to get a verdict.</div></div>
+      </section>
+
+      <section class="panel">
+        <h2>Findings</h2>
+        <div id="findingsArea"><div class="empty">Document-level flags land here: rhythm, punctuation habits, structural patterns.</div></div>
+      </section>
+
+      <section class="panel">
+        <h2>Specimen view</h2>
+        <div id="specArea"><div class="empty">Your text, with every tell inked and explained on hover.</div></div>
+        <div class="legend">
+          <span><span class="dot" style="background:var(--sev3)"></span>strong tell</span>
+          <span><span class="dot" style="background:var(--sev2)"></span>moderate tell</span>
+          <span><span class="dot" style="background:var(--sev1)"></span>weak signal</span>
+        </div>
+      </section>
+    </div>
+  </div>
+
+  <footer>
+    SAPIENIZE measures stylistic fingerprints; it is not a detector oracle and makes no guarantee about any third-party classifier.
+    The durable fix is the same either way: prose that carries your rhythm, your specifics, and your judgment.
+    All analysis runs client-side. The rewrite step sends your text to your selected provider only when you click the button. Tell library: 133 patterns, updated July 2026.
+  </footer>
+  <div class="eyebrow" style="margin-top:12px;"><a href="https://github.com/tmanish/sapienize" style="color:var(--muted); text-decoration:none;">github.com/tmanish/sapienize</a></div>
+</div>
+
+<script>
+/* Sapienize engine v1.0 - pure functions, no DOM. */
+"use strict";
+
+const SAPIENIZE_TELLS = [
+  // sev 3: near-certain AI vocabulary
+  { re: /\bdelv(?:e|es|ed|ing)\b/gi, label: "delve", cat: "lexical", sev: 3, fix: "dig into / look at / examine" },
+  { re: /\b(?:rich\s+)?tapestry\b/gi, label: "tapestry", cat: "lexical", sev: 3, fix: "mix / range / variety" },
+  { re: /\ba testament to\b/gi, label: "a testament to", cat: "lexical", sev: 3, fix: "shows / proves" },
+  { re: /\bever[- ]evolving\b/gi, label: "ever-evolving", cat: "lexical", sev: 3, fix: "changing / cut it" },
+  { re: /\bin today'?s (?:fast[- ]paced|digital|modern|rapidly changing)\b[^.!?]*/gi, label: "in today's [adjective] world", cat: "lexical", sev: 3, fix: "cut the opener, start with the point" },
+  { re: /\bnavigat(?:e|ing) the (?:complexities|landscape|challenges)\b/gi, label: "navigate the complexities", cat: "lexical", sev: 3, fix: "handle / deal with / work through" },
+  { re: /\bgame[- ]chang(?:er|ing)\b/gi, label: "game-changer", cat: "lexical", sev: 3, fix: "name the specific change" },
+  { re: /\btreasure trove\b/gi, label: "treasure trove", cat: "lexical", sev: 3, fix: "a lot of / a stack of" },
+  { re: /\bdouble[- ]edged sword\b/gi, label: "double-edged sword", cat: "lexical", sev: 3, fix: "state the tradeoff directly" },
+  { re: /\bparadigm shift\b/gi, label: "paradigm shift", cat: "lexical", sev: 3, fix: "big change, then say what changed" },
+  { re: /\bunlock(?:ing)? (?:the|new|your) (?:potential|power|possibilities|value)\b/gi, label: "unlock the potential", cat: "lexical", sev: 3, fix: "say what becomes possible" },
+  { re: /\bit(?:'| i)s (?:important|worth) (?:to note|noting) that\b/gi, label: "it's important to note that", cat: "lexical", sev: 3, fix: "delete it, note the thing directly" },
+  { re: /\bit should be noted that\b/gi, label: "it should be noted that", cat: "lexical", sev: 3, fix: "delete it" },
+  { re: /\belevat(?:e|es|ing) your\b/gi, label: "elevate your", cat: "lexical", sev: 3, fix: "improve / sharpen" },
+  { re: /\bseamless(?:ly)?\b/gi, label: "seamless", cat: "lexical", sev: 3, fix: "smooth / without extra steps" },
+  { re: /\bsynerg(?:y|ies|istic)\b/gi, label: "synergy", cat: "lexical", sev: 3, fix: "say how the parts help each other" },
+  { re: /\bholistic(?:ally)?\b/gi, label: "holistic", cat: "lexical", sev: 2, fix: "whole / end-to-end" },
+  { re: /\bstands as a\b/gi, label: "stands as a", cat: "lexical", sev: 3, fix: "is" },
+  { re: /\bserves as a\b/gi, label: "serves as a", cat: "lexical", sev: 2, fix: "is / works as" },
+  { re: /\bplays a (?:vital|crucial|pivotal|key) role\b/gi, label: "plays a vital role", cat: "lexical", sev: 3, fix: "matters because... / does X" },
+  { re: /\bin the (?:realm|world|landscape) of\b/gi, label: "in the realm of", cat: "lexical", sev: 3, fix: "in" },
+  { re: /\bboasts\b/gi, label: "boasts", cat: "lexical", sev: 2, fix: "has" },
+  { re: /\bmyriad\b/gi, label: "myriad", cat: "lexical", sev: 2, fix: "many" },
+  { re: /\bplethora\b/gi, label: "plethora", cat: "lexical", sev: 3, fix: "plenty / a lot" },
+  { re: /\bunderscore(?:s|d)?\b/gi, label: "underscore", cat: "lexical", sev: 2, fix: "show / highlight" },
+  { re: /\bunderpins?\b/gi, label: "underpin", cat: "lexical", sev: 1, fix: "supports / is behind" },
+  { re: /\bharness(?:ing|es)? the\b/gi, label: "harness the", cat: "lexical", sev: 3, fix: "use" },
+  { re: /\bleverag(?:e|es|ed|ing)\b/gi, label: "leverage (verb)", cat: "lexical", sev: 2, fix: "use" },
+  { re: /\bfoster(?:s|ing|ed)?\b/gi, label: "foster", cat: "lexical", sev: 2, fix: "build / encourage" },
+  { re: /\bpivotal\b/gi, label: "pivotal", cat: "lexical", sev: 2, fix: "key / decisive" },
+  { re: /\bcrucial\b/gi, label: "crucial", cat: "lexical", sev: 1, fix: "fine once; swap repeats for 'key' or specifics" },
+  { re: /\brobust\b/gi, label: "robust", cat: "lexical", sev: 1, fix: "sturdy / reliable, or name the property" },
+  { re: /\bcutting[- ]edge\b/gi, label: "cutting-edge", cat: "lexical", sev: 2, fix: "new / latest, or name the technique" },
+  { re: /\bstate[- ]of[- ]the[- ]art\b/gi, label: "state-of-the-art", cat: "lexical", sev: 2, fix: "best available / newest" },
+  { re: /\brevolutioniz(?:e|es|ed|ing)\b/gi, label: "revolutionize", cat: "lexical", sev: 2, fix: "change / replace, then say how" },
+  { re: /\btransformative\b/gi, label: "transformative", cat: "lexical", sev: 2, fix: "say what it transforms into" },
+  { re: /\bempower(?:s|ing|ed)?\b/gi, label: "empower", cat: "lexical", sev: 2, fix: "let / help / give X the ability to" },
+  { re: /\bstreamlin(?:e|es|ed|ing)\b/gi, label: "streamline", cat: "lexical", sev: 2, fix: "simplify / cut steps" },
+  { re: /\bcomprehensive guide\b/gi, label: "comprehensive guide", cat: "lexical", sev: 2, fix: "guide" },
+  { re: /\bdive (?:in|into|deep)\b/gi, label: "dive into", cat: "lexical", sev: 2, fix: "look at / start with" },
+  { re: /\bdeep dive\b/gi, label: "deep dive", cat: "lexical", sev: 2, fix: "close look" },
+  { re: /\blet'?s explore\b/gi, label: "let's explore", cat: "lexical", sev: 2, fix: "here's how X works" },
+  { re: /\bembark(?:s|ed|ing)? on\b/gi, label: "embark on", cat: "lexical", sev: 3, fix: "start" },
+  { re: /\bat its core\b/gi, label: "at its core", cat: "lexical", sev: 2, fix: "basically / fundamentally, or cut" },
+  { re: /\bin essence\b/gi, label: "in essence", cat: "lexical", sev: 2, fix: "cut, or 'basically'" },
+  { re: /\bthe key takeaway\b/gi, label: "the key takeaway", cat: "lexical", sev: 2, fix: "the point is" },
+  { re: /\bwhen it comes to\b/gi, label: "when it comes to", cat: "lexical", sev: 2, fix: "for / with" },
+  { re: /\ba wide (?:range|array|variety) of\b/gi, label: "a wide range of", cat: "lexical", sev: 2, fix: "many / several, or list three" },
+  { re: /\bneedless to say\b/gi, label: "needless to say", cat: "lexical", sev: 2, fix: "cut it, then say it anyway or don't" },
+  { re: /\bthat being said\b/gi, label: "that being said", cat: "lexical", sev: 1, fix: "still / but" },
+  { re: /\bwhether you'?re (?:a |an )?[^.!?]{3,60}? or (?:a |an )?/gi, label: "whether you're X or Y", cat: "structure", sev: 3, fix: "pick one reader and write to them" },
+  { re: /\bnot only\b[^.!?]{3,120}?\bbut also\b/gi, label: "not only... but also", cat: "structure", sev: 2, fix: "split into two claims or keep the stronger one" },
+  { re: /\b(?:it|this|that)(?:'| i)s not (?:just |only )?(?:about )?[^.!?;]{3,80}?[;,] (?:it|this|that)(?:'| i)s\b/gi, label: "it's not just X, it's Y", cat: "structure", sev: 3, fix: "state Y directly" },
+  { re: /\bin conclusion\b/gi, label: "in conclusion", cat: "structure", sev: 3, fix: "just conclude" },
+  { re: /\bin summary\b/gi, label: "in summary", cat: "structure", sev: 2, fix: "cut, or 'so:'" },
+  { re: /^\s*(?:Moreover|Furthermore|Additionally|In addition),/gim, label: "Moreover/Furthermore/Additionally opener", cat: "rhythm", sev: 2, fix: "and / also / plus, or no connector at all" },
+  { re: /\bfirstly\b/gi, label: "firstly", cat: "structure", sev: 2, fix: "first" },
+  { re: /\bultimately\b/gi, label: "ultimately", cat: "lexical", sev: 1, fix: "in the end, or cut" },
+  { re: /\bhowever, it(?:'| i)s\b/gi, label: "however, it is...", cat: "rhythm", sev: 1, fix: "but it's" },
+  { re: /\bthe world of\b/gi, label: "the world of", cat: "lexical", sev: 2, fix: "cut: 'the world of crypto' is 'crypto'" },
+  { re: /\bunleash(?:es|ed|ing)?\b/gi, label: "unleash", cat: "lexical", sev: 3, fix: "release / enable" },
+  { re: /\bbeacon of\b/gi, label: "beacon of", cat: "lexical", sev: 3, fix: "example of" },
+  { re: /\bvibrant\b/gi, label: "vibrant", cat: "lexical", sev: 2, fix: "lively, or describe what you actually see" },
+  { re: /\bbustling\b/gi, label: "bustling", cat: "lexical", sev: 2, fix: "busy / crowded" },
+  { re: /\bnestled\b/gi, label: "nestled", cat: "lexical", sev: 3, fix: "sits / located" },
+  { re: /\bmeticulous(?:ly)?\b/gi, label: "meticulous", cat: "lexical", sev: 2, fix: "careful / exact" },
+  { re: /\bintricate\b/gi, label: "intricate", cat: "lexical", sev: 2, fix: "detailed / complex" },
+  { re: /\bswift(?:ly)? and\b/gi, label: "swiftly and", cat: "lexical", sev: 1, fix: "fast" },
+  { re: /\bfast[- ]paced\b/gi, label: "fast-paced", cat: "lexical", sev: 2, fix: "cut, or name the actual speed" },
+  { re: /\bcannot be overstated\b/gi, label: "cannot be overstated", cat: "lexical", sev: 3, fix: "state it at normal volume" },
+  { re: /\bsignificant(?:ly)?\b/gi, label: "significant", cat: "lexical", sev: 1, fix: "give the number instead" },
+  { re: /\butiliz(?:e|es|ed|ing|ation)\b/gi, label: "utilize", cat: "lexical", sev: 2, fix: "use" },
+  { re: /\bfacilitat(?:e|es|ed|ing)\b/gi, label: "facilitate", cat: "lexical", sev: 2, fix: "help / make possible" },
+  { re: /\bshowcas(?:e|es|ed|ing)\b/gi, label: "showcase", cat: "lexical", sev: 2, fix: "show" },
+  { re: /\bdelight(?:ful|ed)?\b/gi, label: "delightful", cat: "lexical", sev: 1, fix: "say what's good about it" },
+  { re: /\bunprecedented\b/gi, label: "unprecedented", cat: "lexical", sev: 2, fix: "new / first, with evidence" },
+  { re: /\bstakeholders\b/gi, label: "stakeholders", cat: "lexical", sev: 1, fix: "name the actual people" },
+  { re: /\bactionable insights?\b/gi, label: "actionable insights", cat: "lexical", sev: 3, fix: "things you can act on, or name one" },
+  { re: /\bbest practices\b/gi, label: "best practices", cat: "lexical", sev: 1, fix: "fine in dev docs; elsewhere name the practice" },
+  { re: /\bkey (?:insights?|considerations?|aspects?|factors?)\b/gi, label: "key insights/considerations", cat: "lexical", sev: 2, fix: "name them" },
+  { re: /\bhere are (?:some|a few|the top)\b/gi, label: "here are some...", cat: "structure", sev: 1, fix: "go straight to the first item" },
+  { re: /\bwithout further ado\b/gi, label: "without further ado", cat: "structure", sev: 3, fix: "cut" },
+  { re: /\bhope this (?:helps|email finds you well)\b/gi, label: "hope this helps / finds you well", cat: "structure", sev: 2, fix: "cut or personalize" },
+  // 2026 additions: negative parallelism and hook constructions
+  { re: /\bnot because [^.!?]{2,60}?[.,] but because\b/gi, label: "not because X, but because Y", cat: "structure", sev: 3, fix: "give the real reason once, plainly" },
+  { re: /\bno [\w''-]{1,16}\. no [\w''-]{1,16}\. just\b/gi, label: "No X. No Y. Just Z.", cat: "structure", sev: 3, fix: "one plain sentence about what it is" },
+  { re: /\bthat'?s not [^.!?;]{2,40}?[,;] that'?s\b/gi, label: "that's not X, that's Y", cat: "structure", sev: 3, fix: "state Y directly" },
+  { re: /\bnot by [\w ''-]{2,40}?, but by\b/gi, label: "not by X, but by Y", cat: "structure", sev: 2, fix: "keep the second half only" },
+  { re: /\bAnd the [\w ''-]{1,24}\?/g, label: "And the X? Y.", cat: "structure", sev: 2, fix: "join it to the sentence it answers" },
+  { re: /\bThe (?:result|catch|kicker|best part|upshot|problem|takeaway|verdict)\?/gi, label: "The result? (rhetorical fragment)", cat: "structure", sev: 2, fix: "just state the result" },
+  { re: /\bhere'?s the (?:thing|kicker|catch|twist|bottom line)\b/gi, label: "here's the kicker", cat: "structure", sev: 2, fix: "delete the drumroll, keep the point" },
+  { re: /\bpicture this\b/gi, label: "picture this", cat: "structure", sev: 3, fix: "open with the specific scene itself" },
+  { re: /\bas an? [\w ]{3,24}, you know\b/gi, label: "as a [role], you know...", cat: "structure", sev: 2, fix: "say the thing without deputizing the reader" },
+  { re: /\blet that sink in\b/gi, label: "let that sink in", cat: "structure", sev: 3, fix: "trust the reader; cut" },
+  { re: /\bsound familiar\?/gi, label: "sound familiar?", cat: "structure", sev: 2, fix: "cut" },
+  { re: /\blet'?s (?:be honest|face it)\b/gi, label: "let's be honest / face it", cat: "structure", sev: 1, fix: "just be honest without announcing it" },
+  { re: /\bone thing is (?:clear|certain)\b/gi, label: "one thing is clear", cat: "structure", sev: 2, fix: "state the clear thing" },
+  { re: /\bwhether we like it or not\b/gi, label: "whether we like it or not", cat: "structure", sev: 1, fix: "cut" },
+  // 2026 additions: vocabulary
+  { re: /\bmultifaceted\b/gi, label: "multifaceted", cat: "lexical", sev: 3, fix: "name two of the facets instead" },
+  { re: /\binnovative\b/gi, label: "innovative", cat: "lexical", sev: 2, fix: "say what is new about it" },
+  { re: /\boptimiz(?:e|es|ed|ing)\b/gi, label: "optimize", cat: "lexical", sev: 1, fix: "fine in code; in prose, improve / tune / speed up" },
+  { re: /\bat the intersection of\b/gi, label: "at the intersection of", cat: "lexical", sev: 3, fix: "combining X and Y" },
+  { re: /\bin a world where\b/gi, label: "in a world where", cat: "lexical", sev: 3, fix: "cut the movie-trailer opener" },
+  { re: /\bin an era (?:of|where)\b/gi, label: "in an era of", cat: "lexical", sev: 2, fix: "now / today, or cut" },
+  { re: /\bat the end of the day\b/gi, label: "at the end of the day", cat: "lexical", sev: 2, fix: "in the end, or cut" },
+  { re: /\bmasterclass in\b/gi, label: "masterclass in", cat: "lexical", sev: 2, fix: "a strong example of" },
+  { re: /\bsecret sauce\b/gi, label: "secret sauce", cat: "lexical", sev: 2, fix: "name the actual ingredient" },
+  { re: /\bfuture[- ]proof(?:ing|ed)?\b/gi, label: "future-proof", cat: "lexical", sev: 2, fix: "durable / built to last, with evidence" },
+  { re: /\bsupercharg(?:e|es|ed|ing)\b/gi, label: "supercharge", cat: "lexical", sev: 2, fix: "speed up / boost, with a number" },
+  { re: /\bdemocratiz(?:e|es|ed|ing)\b/gi, label: "democratize", cat: "lexical", sev: 2, fix: "make X available to Y" },
+  { re: /\bfrictionless\b/gi, label: "frictionless", cat: "lexical", sev: 2, fix: "easy / one step" },
+  { re: /\bhere to stay\b/gi, label: "here to stay", cat: "lexical", sev: 2, fix: "not going away, or evidence it persists" },
+  { re: /\bperfect storm\b/gi, label: "perfect storm", cat: "lexical", sev: 2, fix: "list the two or three causes" },
+  { re: /\bchecks all the boxes\b/gi, label: "checks all the boxes", cat: "lexical", sev: 2, fix: "name the boxes" },
+  { re: /\bmore than meets the eye\b/gi, label: "more than meets the eye", cat: "lexical", sev: 2, fix: "say what the hidden part is" },
+  { re: /\bblazing(?:ly)?[- ]fast\b/gi, label: "blazing-fast", cat: "lexical", sev: 2, fix: "give the milliseconds" },
+  { re: /\b(?:does|doing|do) the heavy lifting\b/gi, label: "does the heavy lifting", cat: "lexical", sev: 2, fix: "say what it actually does" },
+  { re: /\bquietly (?:became|become|becoming|powerful|brilliant|revolutionary|impressive)\b/gi, label: "quietly [became/powerful]", cat: "lexical", sev: 2, fix: "drop 'quietly'" },
+  { re: /\blook no further\b/gi, label: "look no further", cat: "lexical", sev: 3, fix: "cut" },
+  { re: /\bin a nutshell\b/gi, label: "in a nutshell", cat: "lexical", sev: 1, fix: "in short, or cut" },
+  { re: /\bstark reminder\b/gi, label: "stark reminder", cat: "lexical", sev: 2, fix: "reminder, or state the fact" },
+  { re: /\bgrappl(?:e|es|ing) with\b/gi, label: "grapple with", cat: "lexical", sev: 1, fix: "struggle with / work through" },
+  { re: /\bresonat(?:e|es|ed|ing)\b/gi, label: "resonate", cat: "lexical", sev: 1, fix: "land / connect / ring true" },
+  { re: /\bjourney\b/gi, label: "journey (metaphorical)", cat: "lexical", sev: 1, fix: "process / path, or the literal thing" },
+  { re: /\becosystem\b/gi, label: "ecosystem", cat: "lexical", sev: 1, fix: "fine in biology; elsewhere, platform / toolchain / market" },
+  { re: /\blandscape\b/gi, label: "landscape (metaphorical)", cat: "lexical", sev: 1, fix: "market / field / space, or cut" },
+  { re: /\bsilver bullet\b/gi, label: "silver bullet", cat: "lexical", sev: 1, fix: "single fix / cure-all" },
+  { re: /\btable stakes\b/gi, label: "table stakes", cat: "lexical", sev: 1, fix: "the minimum / expected baseline" },
+  { re: /\bnotably,/gi, label: "notably,", cat: "lexical", sev: 1, fix: "cut, or make the point carry its own weight" },
+  { re: /\bcrucially,/gi, label: "crucially,", cat: "lexical", sev: 2, fix: "cut; if it's crucial, the sentence should show it" },
+  { re: /\bimportantly,/gi, label: "importantly,", cat: "lexical", sev: 1, fix: "cut" },
+  { re: /\barguably\b/gi, label: "arguably", cat: "lexical", sev: 1, fix: "commit or attribute the argument" },
+  { re: /\bpro tip:/gi, label: "pro tip:", cat: "structure", sev: 1, fix: "just give the tip" },
+  { re: /\bspoiler(?: alert)?:/gi, label: "spoiler:", cat: "structure", sev: 1, fix: "cut the wind-up" }
+];
+
+let SENT_RE = null;
+try { SENT_RE = new RegExp("(?<=[.!?])\\s+(?=[A-Z\"'(\\[])"); } catch (e) { SENT_RE = null; }
+
+function splitSentences(text) {
+  const clean = text.replace(/\r/g, "");
+  if (SENT_RE) {
+    return clean.split(SENT_RE).map(function (s) { return s.trim(); }).filter(Boolean);
+  }
+  // Fallback without lookbehind: split on terminator+space, reattach terminators.
+  const parts = clean.split(/([.!?]+)\s+/);
+  const out = [];
+  for (let i = 0; i < parts.length; i += 2) {
+    const s = (parts[i] + (parts[i + 1] || "")).trim();
+    if (s) out.push(s);
+  }
+  return out;
+}
+
+function wordCount(text) {
+  const m = text.match(/[A-Za-z0-9'\u2019-]+/g);
+  return m ? m.length : 0;
+}
+
+function stddev(arr) {
+  if (arr.length < 2) return 0;
+  const mean = arr.reduce(function (a, b) { return a + b; }, 0) / arr.length;
+  const v = arr.reduce(function (a, b) { return a + (b - mean) * (b - mean); }, 0) / arr.length;
+  return Math.sqrt(v);
+}
+
+function analyzeText(text) {
+  const findings = [];
+  const words = wordCount(text);
+  const sentences = splitSentences(text);
+  const sentLens = sentences.map(wordCount).filter(function (n) { return n > 0; });
+  const meanLen = sentLens.length ? sentLens.reduce(function (a, b) { return a + b; }, 0) / sentLens.length : 0;
+  const burstiness = meanLen > 0 ? stddev(sentLens) / meanLen : 0;
+
+  // 1. Lexical and phrase tells with match positions
+  SAPIENIZE_TELLS.forEach(function (t) {
+    t.re.lastIndex = 0;
+    let m;
+    while ((m = t.re.exec(text)) !== null) {
+      findings.push({ start: m.index, end: m.index + m[0].length, label: t.label, cat: t.cat, sev: t.sev, fix: t.fix, snippet: m[0] });
+      if (m.index === t.re.lastIndex) t.re.lastIndex++;
+    }
+  });
+
+  // Resolve overlapping matches so one span of text yields one finding: higher
+  // severity wins, then the longer match, then the earlier one. Keeps the score,
+  // the findings tally, and the specimen highlights in agreement.
+  findings.sort(function (a, b) {
+    return b.sev - a.sev || (b.end - b.start) - (a.end - a.start) || a.start - b.start;
+  });
+  const inline = [];
+  findings.forEach(function (f) {
+    const clash = inline.some(function (k) { return f.start < k.end && k.start < f.end; });
+    if (!clash) inline.push(f);
+  });
+  inline.sort(function (a, b) { return a.start - b.start; });
+
+  // 2. Punctuation signals
+  const emDashes = (text.match(/\u2014/g) || []).length;
+  const emDashRate = words ? (emDashes / words) * 1000 : 0;
+  const semis = (text.match(/;/g) || []).length;
+  const semiRate = words ? (semis / words) * 1000 : 0;
+
+  // 3. Contraction ratio
+  const contractions = (text.match(/\b(?:\w+n['\u2019]t|\w+['\u2019](?:re|ve|ll|d|m)|it['\u2019]s|that['\u2019]s|there['\u2019]s|what['\u2019]s|let['\u2019]s|here['\u2019]s|who['\u2019]s)\b/gi) || []).length;
+  const formalPairs = (text.match(/\b(?:do not|does not|did not|is not|are not|was not|were not|cannot|can not|will not|would not|should not|could not|have not|has not|had not|it is|that is|there is|they are|we are|you are|I am|I have|I will|we will|you will)\b/gi) || []).length;
+  const contractionRatio = (contractions + formalPairs) > 0 ? contractions / (contractions + formalPairs) : null;
+
+  // 4. Rhythm: monotone stretches (3+ consecutive sentences within +/-3 words of each other)
+  let monotoneRuns = 0;
+  for (let i = 0; i + 2 < sentLens.length; i++) {
+    const a = sentLens[i], b = sentLens[i + 1], c = sentLens[i + 2];
+    if (Math.abs(a - b) <= 3 && Math.abs(b - c) <= 3 && a >= 12) { monotoneRuns++; i += 2; }
+  }
+
+  // 5. Rule-of-three density
+  const triads = sentences.filter(function (s) {
+    return /\b[\w'\u2019-]+,\s+[\w'\u2019-]+(?:\s+[\w'\u2019-]+)?,\s+and\s+[\w'\u2019-]+/.test(s);
+  }).length;
+  const triadShare = sentences.length ? triads / sentences.length : 0;
+
+  // 6. Repeated sentence openers
+  const openerCounts = {};
+  sentences.forEach(function (s) {
+    const w = (s.match(/[A-Za-z'\u2019]+/) || [""])[0].toLowerCase();
+    if (w.length > 1) openerCounts[w] = (openerCounts[w] || 0) + 1;
+  });
+  const repeatedOpeners = Object.keys(openerCounts).filter(function (w) {
+    return openerCounts[w] >= 3 && ["the", "a", "i", "it", "this", "and", "but", "so", "we", "you"].indexOf(w) === -1;
+  });
+
+  // 7. Paragraph uniformity
+  const paras = text.split(/\n\s*\n/).map(function (p) { return splitSentences(p).length; }).filter(function (n) { return n > 0; });
+  const paraUniform = paras.length >= 4 && stddev(paras) < 0.75 && paras[0] >= 2;
+
+  // Structural findings (document-level, no span)
+  const global = [];
+  if (emDashRate > 4) global.push({ label: "em dash overuse", cat: "punctuation", sev: 3, detail: emDashes + " em dashes (" + emDashRate.toFixed(1) + " per 1,000 words). Current AI models lean on these hard. Swap most for commas, periods, or parentheses.", metric: emDashRate });
+  else if (emDashRate > 2) global.push({ label: "em dash frequency", cat: "punctuation", sev: 1, detail: emDashes + " em dashes. Borderline; keep only the ones doing real work.", metric: emDashRate });
+  if (semiRate > 5) global.push({ label: "semicolon density", cat: "punctuation", sev: 1, detail: semis + " semicolons. Fine if that is your style; AI overuses them in casual registers.", metric: semiRate });
+  if (contractionRatio !== null && contractionRatio < 0.25 && (contractions + formalPairs) >= 6) global.push({ label: "almost no contractions", cat: "voice", sev: 3, detail: "Contraction ratio " + Math.round(contractionRatio * 100) + "%. Formal expansions like 'do not' and 'it is' everywhere reads machine-formal. Contract where you'd contract out loud.", metric: contractionRatio });
+  else if (contractionRatio !== null && contractionRatio < 0.45 && (contractions + formalPairs) >= 6) global.push({ label: "low contraction rate", cat: "voice", sev: 1, detail: "Contraction ratio " + Math.round(contractionRatio * 100) + "%. Slightly stiff.", metric: contractionRatio });
+  if (burstiness < 0.32 && sentLens.length >= 6) global.push({ label: "flat sentence rhythm", cat: "rhythm", sev: 3, detail: "Burstiness " + burstiness.toFixed(2) + ". Sentences are all similar lengths. Humans mix long runs with short punches. Break some up. Add a two-word sentence.", metric: burstiness });
+  else if (burstiness < 0.45 && sentLens.length >= 6) global.push({ label: "even sentence rhythm", cat: "rhythm", sev: 1, detail: "Burstiness " + burstiness.toFixed(2) + ". Some variety, could use more contrast.", metric: burstiness });
+  if (monotoneRuns > 0) global.push({ label: "monotone stretches", cat: "rhythm", sev: 2, detail: monotoneRuns + " run(s) of 3+ back-to-back sentences of nearly identical length.", metric: monotoneRuns });
+  if (triadShare > 0.18 && sentences.length >= 8) global.push({ label: "rule-of-three overload", cat: "structure", sev: 2, detail: triads + " of " + sentences.length + " sentences use an 'X, Y, and Z' triple. One is rhetoric. Six is a pattern.", metric: triadShare });
+  if (repeatedOpeners.length > 0) global.push({ label: "repeated sentence openers", cat: "rhythm", sev: 1, detail: "3+ sentences each start with: " + repeatedOpeners.join(", ") + ".", metric: repeatedOpeners.length });
+  if (paraUniform) global.push({ label: "uniform paragraph blocks", cat: "structure", sev: 2, detail: "Every paragraph is nearly the same size. Human paragraphs sprawl and shrink with the idea.", metric: 1 });
+
+  // Score
+  let penalty = 0;
+  inline.forEach(function (f) { penalty += f.sev * 1.4; });
+  // scale inline penalty by document length so one 'crucial' in 2,000 words doesn't tank it
+  if (words > 0) penalty = penalty * Math.min(1, 400 / Math.max(words, 120));
+  global.forEach(function (g) { penalty += g.sev * 4; });
+  const score = Math.max(4, Math.min(100, Math.round(100 - penalty)));
+
+  let band, bandNote;
+  if (score >= 82) { band = "Reads human"; bandNote = "Natural rhythm, personal voice. Light touch-ups at most."; }
+  else if (score >= 62) { band = "Light AI accent"; bandNote = "Mostly fine. A handful of tells to clear."; }
+  else if (score >= 40) { band = "Noticeable AI patterns"; bandNote = "A careful pass will fix this. Focus on the red flags first."; }
+  else { band = "Heavy AI fingerprint"; bandNote = "Rewrite rather than patch. Read it aloud and retype it the way you'd say it."; }
+
+  return {
+    words: words,
+    sentences: sentences.length,
+    meanLen: meanLen,
+    burstiness: burstiness,
+    emDashes: emDashes,
+    emDashRate: emDashRate,
+    contractionRatio: contractionRatio,
+    inline: inline,
+    global: global,
+    score: score,
+    band: band,
+    bandNote: bandNote
+  };
+}
+
+
+
+</script>
+
+<script>
+"use strict";
+(function () {
+  var $ = function (id) { return document.getElementById(id); };
+  var lastAnalysis = null;
+  var lastText = "";
+
+  var SAMPLE = "In today's fast-paced digital landscape, building a personal brand stands as a testament to professional growth. It is important to note that consistency is not just a habit; it is a paradigm shift. Whether you're a designer or a developer, leveraging cutting-edge tools can unlock the potential of your content strategy. Moreover, publishing regularly can streamline your workflow, foster engagement, and elevate your reach. Furthermore, it is crucial to delve into analytics to navigate the complexities of each platform. In conclusion, the transformative power of showing up daily cannot be overstated.";
+
+  function escapeHtml(s) {
+    return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+  }
+
+  function updateCount() {
+    var n = ($("input").value.match(/[A-Za-z0-9'\u2019-]+/g) || []).length;
+    $("incount").textContent = n + " words";
+  }
+  $("input").addEventListener("input", updateCount);
+  $("loadSample").addEventListener("click", function () { $("input").value = SAMPLE; updateCount(); });
+
+  function scoreColor(score) {
+    if (score >= 82) return "var(--good)";
+    if (score >= 62) return "var(--sev2)";
+    return "var(--sev3)";
+  }
+
+  function dialSVG(score, size) {
+    var r = 54, c = 2 * Math.PI * r, frac = Math.max(0, Math.min(1, score / 100));
+    var col = scoreColor(score);
+    return '<svg class="dial" viewBox="0 0 132 132" width="' + size + '" height="' + size + '" role="img" aria-label="Sapien score ' + score + ' out of 100">' +
+      '<circle cx="66" cy="66" r="' + r + '" fill="none" stroke="var(--line)" stroke-width="9"/>' +
+      '<circle cx="66" cy="66" r="' + r + '" fill="none" stroke="' + col + '" stroke-width="9" stroke-linecap="round" stroke-dasharray="' + (c * frac).toFixed(1) + ' ' + c.toFixed(1) + '" transform="rotate(-90 66 66)"/>' +
+      '<text x="66" y="63" text-anchor="middle" font-size="30" fill="var(--ink)">' + score + '</text>' +
+      '<text x="66" y="84" text-anchor="middle" font-size="10" fill="var(--muted)" letter-spacing="2">SAPIEN</text></svg>';
+  }
+
+  function fmtRatio(v) { return v === null ? "n/a" : Math.round(v * 100) + "%"; }
+
+  function renderScore(a) {
+    var html = '<div class="scorecard">' + dialSVG(a.score, 132) +
+      '<div><div class="band" style="color:' + scoreColor(a.score) + '">' + a.band + '</div>' +
+      '<div class="bandnote">' + a.bandNote + '</div></div></div>' +
+      '<div class="metrics">' +
+      metric("Words", a.words, "") +
+      metric("Burstiness", a.burstiness.toFixed(2), "sentence-length variance; humans usually land 0.45+") +
+      metric("Contractions", fmtRatio(a.contractionRatio), "share of contractable spots you actually contract") +
+      metric("Em dashes", a.emDashes + " (" + a.emDashRate.toFixed(1) + "/1k)", "over 4 per 1,000 words reads machine") +
+      metric("Inline tells", a.inline.length, "flagged words and phrases") +
+      '</div>';
+    $("scoreArea").innerHTML = html;
+  }
+  function metric(k, v, hint) {
+    return '<div class="metric"><div class="k">' + k + '</div><div class="v">' + v + '</div>' + (hint ? '<div class="hint">' + hint + '</div>' : "") + '</div>';
+  }
+
+  function renderFindings(a) {
+    var rows = [];
+    a.global.forEach(function (g) {
+      rows.push('<div class="finding"><span class="chip s' + g.sev + '">' + (g.sev === 3 ? "strong" : g.sev === 2 ? "moderate" : "weak") + '</span>' +
+        '<div><div class="t">' + escapeHtml(g.label) + '</div><div class="d">' + escapeHtml(g.detail) + '</div></div></div>');
+    });
+    var tally = {};
+    a.inline.forEach(function (f) {
+      var key = f.label + "|" + f.sev + "|" + f.fix;
+      tally[key] = (tally[key] || 0) + 1;
+    });
+    Object.keys(tally).sort(function (x, y) { return Number(y.split("|")[1]) - Number(x.split("|")[1]); }).forEach(function (key) {
+      var p = key.split("|");
+      rows.push('<div class="finding"><span class="chip s' + p[1] + '">' + (p[1] === "3" ? "strong" : p[1] === "2" ? "moderate" : "weak") + '</span>' +
+        '<div><div class="t">' + escapeHtml(p[0]) + '</div><div class="d">try: ' + escapeHtml(p[2]) + '</div></div>' +
+        '<span class="tally">\u00D7' + tally[key] + '</span></div>');
+    });
+    $("findingsArea").innerHTML = rows.length ? rows.join("") : '<div class="empty">Clean. No document-level flags, no phrase tells.</div>';
+  }
+
+  function renderSpecimen(text, a) {
+    var spans = [];
+    var lastEnd = -1;
+    a.inline.forEach(function (f) {
+      if (f.start >= lastEnd) { spans.push(f); lastEnd = f.end; }
+    });
+    var out = [], cursor = 0;
+    spans.forEach(function (f) {
+      out.push(escapeHtml(text.slice(cursor, f.start)));
+      var tip = f.label + " \u00B7 " + f.fix;
+      out.push('<mark class="s' + f.sev + '" data-tip="' + escapeHtml(tip) + '" title="' + escapeHtml(tip) + '" tabindex="0">' + escapeHtml(text.slice(f.start, f.end)) + '</mark>');
+      cursor = f.end;
+    });
+    out.push(escapeHtml(text.slice(cursor)));
+    $("specArea").innerHTML = '<div class="specimen">' + out.join("") + '</div>';
+  }
+
+  $("analyzeBtn").addEventListener("click", function () {
+    var text = $("input").value.trim();
+    if (!text) { $("scoreArea").innerHTML = '<div class="empty">Paste something first.</div>'; return; }
+    lastText = text;
+    lastAnalysis = analyzeText(text);
+    renderScore(lastAnalysis);
+    renderFindings(lastAnalysis);
+    renderSpecimen(text, lastAnalysis);
+    $("rewriteBtn").disabled = false;
+    $("rwStatus").textContent = "";
+    $("rwStatus").className = "status";
+    $("rwResult").classList.add("hidden");
+  });
+
+  var PERSONAS = {
+    pm: "Project manager, 52, California. Leads with the decision, the date, or the owner. Short declarative sentences; first-person plural for team work. Concrete nouns: deadlines, budgets, tradeoffs. Allergic to hype adjectives. American English.",
+    eng: "Software engineer, 28, India. Precise and economical. Technical terms used exactly, zero marketing gloss. Hedges only where uncertainty is real ('should hold up', 'worth benchmarking'). Prefers examples and numbers over abstractions. Indian professional English: direct, lightly formal, neutral.",
+    law: "Solicitor, 64, UK. Measured, carefully qualified claims. Longer sentences with disciplined subordination, never padded. Dry understatement over emphasis. British English spelling and idiom, used naturally rather than performed.",
+    sci: "Research scientist, 32, Florida. Evidence first: claims sized to the data, uncertainty stated plainly. Methods before conclusions. Precise quantities, minimal adjectives, no superlatives without a measurement. American English.",
+    auto: "Automotive engineer, 41, Germany. Specification-minded: units, tolerances, and test conditions named exactly. Direct statements without softening; understated conclusions that let the numbers argue. International professional English: correct, lightly formal, no decorative idioms.",
+    grad: "College graduate, 24, California. Casual but not sloppy. Short sentences, quick asides, first person freely. Concrete everyday references over jargon. Comfortable starting sentences with And or But. American English."
+  };
+
+  function personaSpec() {
+    var v = $("persona").value;
+    if (v === "custom") return $("personaCustom").value.trim();
+    return PERSONAS[v] || "";
+  }
+
+  $("persona").addEventListener("change", function () {
+    $("personaCustom").classList.toggle("hidden", $("persona").value !== "custom");
+  });
+
+  function buildPrompt(text, a, voice) {
+    var flagged = {};
+    a.inline.forEach(function (f) { flagged[f.label] = true; });
+    var persona = personaSpec();
+    var lines = [
+      "You are a line editor restoring a human author's voice to a draft. Rewrite the draft below.",
+      "Hard rules:",
+      "- Preserve every fact, claim, number, and name. Add nothing new. Keep length within 15% of the original.",
+      "- Remove these flagged patterns entirely: " + (Object.keys(flagged).join("; ") || "none flagged; still avoid stock AI phrasing") + ".",
+      (a.emDashRate > 2 ? "- Cut em dashes down to at most one; use commas, periods, or parentheses." : ""),
+      (a.contractionRatio !== null && a.contractionRatio < 0.45 ? "- Use contractions wherever a person would use them speaking." : ""),
+      (a.burstiness < 0.45 ? "- Vary sentence length hard: mix long sentences with short ones. Include at least one sentence under five words." : ""),
+      "- No stock transitions (moreover, furthermore, additionally, in conclusion). Connect ideas by logic or drop the connector.",
+      "- Prefer concrete specifics over abstract intensifiers.",
+      persona ? "Write in the register of this author persona. The persona shapes rhythm, word choice, hedging style, and spelling convention ONLY. Do not invent biographical details, credentials, anecdotes, opinions, or first-person experiences that are not already in the draft.\n<persona>\n" + persona + "\n</persona>" : "",
+      voice ? "Match the rhythm, vocabulary, and register of this writing sample from the author. Where the sample and the persona conflict, the sample wins.\n<voice_sample>\n" + voice + "\n</voice_sample>" : "",
+      "Return only the rewritten text. No preamble, no notes, no quotation marks around it.",
+      "<draft>\n" + text + "\n</draft>"
+    ];
+    return lines.filter(Boolean).join("\n");
+  }
+
+  function setStatus(msg, isErr) {
+    $("rwStatus").className = isErr ? "status err" : "status";
+    $("rwStatus").textContent = msg;
+  }
+
+  var PROVIDER_DEFAULTS = {
+    anthropic: { model: "claude-sonnet-4-6", keyHint: "sk-ant-..." },
+    openai: { model: "gpt-4o-mini", keyHint: "sk-..." },
+    openrouter: { model: "openai/gpt-4o-mini", keyHint: "sk-or-..." }
+  };
+
+  $("settingsBtn").addEventListener("click", function () {
+    $("keyRow").classList.toggle("hidden");
+  });
+
+  $("provider").addEventListener("change", function () {
+    var p = PROVIDER_DEFAULTS[$("provider").value];
+    $("modelName").value = p.model;
+    $("apiKey").placeholder = p.keyHint;
+  });
+
+  function withTimeout(promise, ms) {
+    var t;
+    var timeout = new Promise(function (resolve, reject) {
+      t = setTimeout(function () {
+        var e = new Error("Timed out");
+        e.name = "TimeoutError";
+        reject(e);
+      }, ms);
+    });
+    return Promise.race([promise, timeout]).finally(function () { clearTimeout(t); });
+  }
+
+  async function callModel(prompt, provider, apiKey, model, words) {
+    var dynTokens = Math.min(8000, Math.max(1200, Math.round(words * 2.2) + 400));
+    var url, headers = { "Content-Type": "application/json" }, body;
+    if (provider === "anthropic") {
+      url = "https://api.anthropic.com/v1/messages";
+      var maxTokens = 1000;
+      if (apiKey) {
+        headers["x-api-key"] = apiKey;
+        headers["anthropic-version"] = "2023-06-01";
+        headers["anthropic-dangerous-direct-browser-access"] = "true";
+        maxTokens = dynTokens;
+      }
+      body = { model: model, max_tokens: maxTokens, messages: [{ role: "user", content: prompt }] };
+    } else {
+      url = provider === "openai" ? "https://api.openai.com/v1/chat/completions" : "https://openrouter.ai/api/v1/chat/completions";
+      headers["Authorization"] = "Bearer " + apiKey;
+      body = { model: model, max_tokens: dynTokens, messages: [{ role: "user", content: prompt }] };
+    }
+    var resp = await withTimeout(fetch(url, { method: "POST", headers: headers, body: JSON.stringify(body) }), 90000);
+    if (!resp.ok) {
+      var detail = "";
+      try { var eb = await resp.json(); detail = (eb.error && eb.error.message) ? eb.error.message : ""; } catch (ig) {}
+      var err = new Error(detail || ("HTTP " + resp.status));
+      err.status = resp.status;
+      throw err;
+    }
+    var data = await resp.json();
+    if (provider === "anthropic") {
+      return {
+        text: (data.content || []).filter(function (b) { return b.type === "text"; }).map(function (b) { return b.text; }).join("\n").trim(),
+        truncated: data.stop_reason === "max_tokens"
+      };
+    }
+    var choice = (data.choices && data.choices[0]) || {};
+    return {
+      text: ((choice.message && choice.message.content) || "").trim(),
+      truncated: choice.finish_reason === "length"
+    };
+  }
+
+  function isNetworkError(e) {
+    return e.name === "TypeError" || /NetworkError|Failed to fetch|Load failed/i.test(e.message || "");
+  }
+
+  $("rewriteBtn").addEventListener("click", async function () {
+    if (!lastAnalysis) return;
+    var btn = $("rewriteBtn");
+    var apiKey = $("apiKey").value.trim();
+    var provider = $("provider").value;
+    var model = $("modelName").value.trim() || PROVIDER_DEFAULTS[provider].model;
+    var words = lastAnalysis.words;
+    if (provider !== "anthropic" && !apiKey) {
+      $("keyRow").classList.remove("hidden");
+      setStatus(provider + " always needs your own API key. Paste it above and click Rewrite again.", true);
+      return;
+    }
+    btn.disabled = true;
+    if (provider === "anthropic" && !apiKey && words > 650) {
+      setStatus("Rewriting\u2026 Note: keyless mode caps the response, so drafts over ~650 words may come back truncated. Run long pieces in sections, or add a key under API settings.", false);
+    } else {
+      setStatus("Rewriting\u2026", false);
+    }
+    try {
+      var out = await callModel(buildPrompt(lastText, lastAnalysis, $("voice").value.trim()), provider, apiKey, model, words);
+      if (!out.text) throw new Error("Empty response from the model");
+      var re = analyzeText(out.text);
+      $("rwText").textContent = out.text;
+      $("rwDelta").innerHTML = 'score ' + lastAnalysis.score + ' \u2192 <span class="up">' + re.score + '</span> \u00B7 ' + re.inline.length + ' tell' + (re.inline.length === 1 ? '' : 's') + ' remain';
+      $("rwResult").classList.remove("hidden");
+      if (out.truncated) {
+        setStatus("Output hit the token cap and was cut mid-draft. " + (apiKey ? "Split the draft and run in sections." : "Add an API key under API settings for a larger budget, or run in sections."), true);
+        if (!apiKey) $("keyRow").classList.remove("hidden");
+      } else if (re.score > lastAnalysis.score) {
+        setStatus("Done. Read it aloud once; keep only the lines that sound like you. 'Use as new specimen' runs another pass.", false);
+      } else {
+        setStatus("Done, but the score did not improve. Iterate once more or edit by hand from the findings list.", false);
+      }
+    } catch (e) {
+      if (provider === "anthropic" && !apiKey && isNetworkError(e)) {
+        $("keyRow").classList.remove("hidden");
+        setStatus("The keyless path only works inside a Claude artifact. Paste an API key above (or switch provider) and click Rewrite again.", true);
+      } else if (e.name === "TimeoutError") {
+        setStatus("Timed out after 90 seconds. Try again, or split the draft.", true);
+      } else if (e.status === 401 || e.status === 403) {
+        setStatus("The API rejected that key (" + e.status + "). Check the key and the provider selection, then retry.", true);
+      } else if (e.status === 404) {
+        setStatus("Model not found: '" + model + "'. Check the model name for " + provider + " and retry.", true);
+      } else if (e.status === 429) {
+        setStatus("Rate limited by the API. Wait a minute and retry.", true);
+      } else if (e.status === 529 || e.status === 503) {
+        setStatus("The API is overloaded right now. Retry in a moment.", true);
+      } else {
+        setStatus("Rewrite failed: " + e.message + ". The findings list works as a manual edit checklist meanwhile.", true);
+      }
+    } finally {
+      btn.disabled = false;
+    }
+  });
+
+  $("iterateBtn").addEventListener("click", function () {
+    var t = $("rwText").textContent;
+    if (!t) return;
+    $("input").value = t;
+    updateCount();
+    $("analyzeBtn").dispatchEvent(new Event("click"));
+    if (typeof $("input").scrollIntoView === "function") {
+      try { $("input").scrollIntoView({ behavior: "smooth", block: "start" }); } catch (e) { $("input").scrollIntoView(); }
+    }
+  });
+
+  $("copyBtn").addEventListener("click", function () {
+    var t = $("rwText").textContent;
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(t).then(function () { $("copyBtn").textContent = "Copied"; setTimeout(function () { $("copyBtn").textContent = "Copy"; }, 1500); });
+    } else {
+      var ta = document.createElement("textarea"); ta.value = t; document.body.appendChild(ta); ta.select();
+      try { document.execCommand("copy"); } catch (err) {}
+      document.body.removeChild(ta);
+      $("copyBtn").textContent = "Copied"; setTimeout(function () { $("copyBtn").textContent = "Copy"; }, 1500);
+    }
+  });
+})();
+</script>
+</body>
+</html>

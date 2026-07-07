@@ -1,0 +1,521 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Sapienize: Text Forensics and Voice Restoration</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0A0C11;
+    --surface: #10141C;
+    --surface-2: #161B26;
+    --line: #232A38;
+    --ink: #E9E6DE;
+    --muted: #8A92A3;
+    --sev3: #E5654F;
+    --sev2: #E0A84F;
+    --sev1: #7D8BBE;
+    --good: #4E82E6;
+    --mono: "DM Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+    --sans: "DM Sans", -apple-system, Segoe UI, sans-serif;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html { background: var(--bg); }
+  body { font-family: var(--sans); color: var(--ink); background: var(--bg); line-height: 1.55; -webkit-font-smoothing: antialiased; }
+  .wrap { max-width: 1240px; margin: 0 auto; padding: 28px 24px 80px; }
+
+  header { display: flex; align-items: baseline; justify-content: space-between; gap: 16px; flex-wrap: wrap; padding-bottom: 20px; border-bottom: 1px solid var(--line); }
+  .brand { display: flex; align-items: baseline; gap: 14px; }
+  .wordmark { font-weight: 700; font-size: 26px; letter-spacing: 0.14em; }
+  .wordmark .flip { color: var(--good); }
+  .eyebrow { font-family: var(--mono); font-size: 11px; letter-spacing: 0.18em; color: var(--muted); text-transform: uppercase; }
+  .tagline { font-family: var(--mono); font-size: 12px; color: var(--muted); }
+
+  .grid { display: grid; grid-template-columns: minmax(340px, 46%) 1fr; gap: 24px; margin-top: 24px; align-items: start; }
+  @media (max-width: 900px) { .grid { grid-template-columns: 1fr; } }
+
+  .panel { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 18px; }
+  .panel h2 { font-size: 13px; font-family: var(--mono); font-weight: 500; letter-spacing: 0.16em; text-transform: uppercase; color: var(--muted); margin-bottom: 12px; }
+
+  textarea { width: 100%; min-height: 320px; resize: vertical; background: var(--bg); color: var(--ink); border: 1px solid var(--line); border-radius: 8px; padding: 14px; font-family: var(--sans); font-size: 15px; line-height: 1.6; }
+  textarea:focus, button:focus-visible, input:focus { outline: 2px solid var(--good); outline-offset: 2px; }
+  textarea.small { min-height: 100px; font-size: 14px; }
+
+  .bar { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 12px; flex-wrap: wrap; }
+  .count { font-family: var(--mono); font-size: 12px; color: var(--muted); }
+  button { font-family: var(--sans); font-weight: 600; font-size: 14px; border: none; border-radius: 8px; padding: 10px 20px; cursor: pointer; }
+  .primary { background: var(--good); color: #F2F5FB; }
+  .primary:hover { filter: brightness(1.08); }
+  .ghost { background: transparent; color: var(--ink); border: 1px solid var(--line); }
+  .ghost:hover { border-color: var(--muted); }
+  button:disabled { opacity: 0.45; cursor: not-allowed; }
+
+  /* Score card */
+  .scorecard { display: flex; gap: 22px; align-items: center; flex-wrap: wrap; }
+  .dial { width: 132px; height: 132px; flex: 0 0 auto; }
+  .dial text { font-family: var(--mono); }
+  .band { font-size: 20px; font-weight: 700; }
+  .bandnote { color: var(--muted); font-size: 14px; margin-top: 4px; max-width: 46ch; }
+  .metrics { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 10px; margin-top: 16px; }
+  .metric { background: var(--surface-2); border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; }
+  .metric .k { font-family: var(--mono); font-size: 10px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--muted); }
+  .metric .v { font-family: var(--mono); font-size: 18px; margin-top: 2px; }
+  .metric .hint { font-size: 11px; color: var(--muted); margin-top: 2px; }
+
+  /* Findings */
+  .finding { display: flex; gap: 10px; padding: 10px 0; border-bottom: 1px solid var(--line); align-items: flex-start; }
+  .finding:last-child { border-bottom: none; }
+  .chip { flex: 0 0 auto; font-family: var(--mono); font-size: 10px; letter-spacing: 0.08em; padding: 3px 8px; border-radius: 99px; margin-top: 2px; text-transform: uppercase; }
+  .chip.s3 { background: rgba(229,101,79,0.16); color: var(--sev3); }
+  .chip.s2 { background: rgba(224,168,79,0.16); color: var(--sev2); }
+  .chip.s1 { background: rgba(125,139,190,0.18); color: var(--sev1); }
+  .finding .t { font-weight: 600; font-size: 14px; }
+  .finding .d { color: var(--muted); font-size: 13px; }
+  .tally { font-family: var(--mono); font-size: 12px; color: var(--muted); margin-left: auto; flex: 0 0 auto; }
+
+  /* Specimen */
+  .specimen { white-space: pre-wrap; font-size: 15px; line-height: 1.75; background: var(--bg); border: 1px solid var(--line); border-radius: 8px; padding: 16px; max-height: 460px; overflow: auto; }
+  mark { border-radius: 3px; padding: 0 2px; color: var(--ink); cursor: help; position: relative; background: transparent; }
+  mark.s3 { background: rgba(229,101,79,0.28); box-shadow: inset 0 -2px 0 var(--sev3); }
+  mark.s2 { background: rgba(224,168,79,0.24); box-shadow: inset 0 -2px 0 var(--sev2); }
+  mark.s1 { background: rgba(125,139,190,0.22); box-shadow: inset 0 -2px 0 var(--sev1); }
+  mark:hover::after, mark:focus::after { content: attr(data-tip); position: absolute; left: 0; bottom: calc(100% + 6px); z-index: 5; background: #0B0E14; border: 1px solid var(--line); color: var(--ink); font-size: 12px; font-family: var(--mono); line-height: 1.4; padding: 8px 10px; border-radius: 6px; width: max-content; max-width: 320px; white-space: normal; }
+
+  .legend { display: flex; gap: 16px; margin-top: 10px; font-family: var(--mono); font-size: 11px; color: var(--muted); flex-wrap: wrap; }
+  .dot { display: inline-block; width: 9px; height: 9px; border-radius: 2px; margin-right: 5px; vertical-align: baseline; }
+
+  /* Rewrite */
+  .voice-label { font-size: 13px; color: var(--muted); margin: 10px 0 6px; }
+  .status { font-family: var(--mono); font-size: 12px; color: var(--muted); margin-top: 10px; min-height: 18px; }
+  .status.err { color: var(--sev3); }
+  .result-head { display: flex; align-items: center; gap: 14px; margin: 14px 0 8px; flex-wrap: wrap; }
+  .delta { font-family: var(--mono); font-size: 13px; }
+  .delta .up { color: var(--good); }
+  .rewritten { white-space: pre-wrap; font-size: 15px; line-height: 1.7; background: var(--bg); border: 1px solid var(--line); border-radius: 8px; padding: 16px; max-height: 420px; overflow: auto; }
+
+  .empty { color: var(--muted); font-size: 14px; padding: 26px 8px; text-align: center; }
+  .stack > .panel { margin-bottom: 24px; }
+  footer { margin-top: 40px; border-top: 1px solid var(--line); padding-top: 16px; font-family: var(--mono); font-size: 11px; color: var(--muted); line-height: 1.8; }
+  .hidden { display: none; }
+  @media (prefers-reduced-motion: no-preference) {
+    .panel { transition: border-color 0.2s ease; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div class="brand">
+      <div class="wordmark">SAPIEN<span class="flip">IZE</span></div>
+      <div class="eyebrow">Text forensics · v1.1</div>
+    </div>
+    <div style="text-align:right;">
+      <div class="tagline">Find the machine accent in your draft. Restore your own voice.</div>
+      <div class="eyebrow" style="margin-top:4px;">Updated: July 2026</div>
+    </div>
+  </header>
+
+  <div class="grid">
+    <div class="stack">
+      <section class="panel">
+        <h2>Specimen intake</h2>
+        <textarea id="input" spellcheck="false" placeholder="Paste your draft. Nothing leaves this page during analysis; every check runs locally in your browser."></textarea>
+        <div class="bar">
+          <span class="count" id="incount">0 words</span>
+          <span>
+            <button class="ghost" id="loadSample" type="button">Load sample</button>
+            <button class="primary" id="analyzeBtn" type="button">Run forensics</button>
+          </span>
+        </div>
+      </section>
+
+      <section class="panel" id="rewritePanel">
+        <h2>Voice restoration</h2>
+        <div class="voice-label">Write as a persona. The persona sets register, rhythm, and spelling; it never invents facts, credentials, or anecdotes.</div>
+        <select id="persona" style="width:100%; background:var(--bg); color:var(--ink); border:1px solid var(--line); border-radius:8px; padding:10px 12px; font-family:var(--sans); font-size:14px;">
+          <option value="">No persona (neutral, your sample only)</option>
+          <option value="pm">Project manager, 52, California</option>
+          <option value="eng">Software engineer, 28, India</option>
+          <option value="law">Solicitor, 64, UK</option>
+          <option value="sci">Research scientist, 32, Florida</option>
+          <option value="auto">Automotive engineer, 41, Germany</option>
+          <option value="grad">College graduate, 24, California</option>
+          <option value="custom">Custom persona...</option>
+        </select>
+        <input type="text" id="personaCustom" class="hidden" spellcheck="false" placeholder="Describe the author: role, age, region, register. Example: retired teacher, 60, Texas, warm and plain-spoken." style="width:100%; margin-top:8px; background:var(--bg); color:var(--ink); border:1px solid var(--line); border-radius:8px; padding:10px 12px; font-family:var(--sans); font-size:14px;">
+        <div class="voice-label">Optional: paste 100 to 300 words you wrote yourself, no AI. The rewrite will match its rhythm and vocabulary. If you set both, your sample wins over the persona wherever they conflict.</div>
+        <textarea id="voice" class="small" spellcheck="false" placeholder="A Slack rant, an old blog paragraph, an email. Anything that sounds like you."></textarea>
+        <div class="bar">
+          <span class="count">Rewrites use Claude and keep your facts intact. Works per pass on drafts up to roughly 600 words; run longer pieces in sections.</span>
+          <span>
+            <button class="ghost" id="settingsBtn" type="button">API settings</button>
+            <button class="primary" id="rewriteBtn" type="button" disabled>Rewrite in my voice</button>
+          </span>
+        </div>
+        <div id="keyRow" class="hidden">
+          <div class="voice-label">Rewrite engine. Anthropic works keyless inside a Claude artifact; everywhere else, and for OpenAI or OpenRouter always, paste your own API key. Keys stay in memory for this tab only, never stored, sent only to the selected provider.</div>
+          <div style="display:grid; grid-template-columns: 1fr 1fr; gap:8px;">
+            <select id="provider" style="background:var(--bg); color:var(--ink); border:1px solid var(--line); border-radius:8px; padding:10px 12px; font-family:var(--sans); font-size:13px;">
+              <option value="anthropic">Anthropic</option>
+              <option value="openai">OpenAI</option>
+              <option value="openrouter">OpenRouter</option>
+            </select>
+            <input type="text" id="modelName" value="claude-sonnet-4-6" spellcheck="false" style="background:var(--bg); color:var(--ink); border:1px solid var(--line); border-radius:8px; padding:10px 12px; font-family:var(--mono); font-size:12px;">
+          </div>
+          <input type="password" id="apiKey" autocomplete="off" spellcheck="false" placeholder="sk-ant-..." style="width:100%; margin-top:8px; background:var(--bg); color:var(--ink); border:1px solid var(--line); border-radius:8px; padding:10px 12px; font-family:var(--mono); font-size:13px;">
+        </div>
+        <div class="status" id="rwStatus"></div>
+        <div id="rwResult" class="hidden">
+          <div class="result-head">
+            <strong>Restored draft</strong>
+            <span class="delta" id="rwDelta"></span>
+            <button class="ghost" id="copyBtn" type="button">Copy</button>
+            <button class="ghost" id="iterateBtn" type="button">Use as new specimen</button>
+          </div>
+          <div class="rewritten" id="rwText"></div>
+        </div>
+      </section>
+    </div>
+
+    <div class="stack">
+      <section class="panel">
+        <h2>Sapien score</h2>
+        <div id="scoreArea"><div class="empty">Run forensics to get a verdict.</div></div>
+      </section>
+
+      <section class="panel">
+        <h2>Findings</h2>
+        <div id="findingsArea"><div class="empty">Document-level flags land here: rhythm, punctuation habits, structural patterns.</div></div>
+      </section>
+
+      <section class="panel">
+        <h2>Specimen view</h2>
+        <div id="specArea"><div class="empty">Your text, with every tell inked and explained on hover.</div></div>
+        <div class="legend">
+          <span><span class="dot" style="background:var(--sev3)"></span>strong tell</span>
+          <span><span class="dot" style="background:var(--sev2)"></span>moderate tell</span>
+          <span><span class="dot" style="background:var(--sev1)"></span>weak signal</span>
+        </div>
+      </section>
+    </div>
+  </div>
+
+  <footer>
+    SAPIENIZE measures stylistic fingerprints; it is not a detector oracle and makes no guarantee about any third-party classifier.
+    The durable fix is the same either way: prose that carries your rhythm, your specifics, and your judgment.
+    All analysis runs client-side. The rewrite step sends your text to your selected provider only when you click the button. Tell library: 133 patterns, updated July 2026.
+  </footer>
+  <div class="eyebrow" style="margin-top:12px;"><a href="https://github.com/tmanish/sapienize" style="color:var(--muted); text-decoration:none;">github.com/tmanish/sapienize</a></div>
+</div>
+
+<script>
+/*__ENGINE__*/
+</script>
+
+<script>
+"use strict";
+(function () {
+  var $ = function (id) { return document.getElementById(id); };
+  var lastAnalysis = null;
+  var lastText = "";
+
+  var SAMPLE = "In today's fast-paced digital landscape, building a personal brand stands as a testament to professional growth. It is important to note that consistency is not just a habit; it is a paradigm shift. Whether you're a designer or a developer, leveraging cutting-edge tools can unlock the potential of your content strategy. Moreover, publishing regularly can streamline your workflow, foster engagement, and elevate your reach. Furthermore, it is crucial to delve into analytics to navigate the complexities of each platform. In conclusion, the transformative power of showing up daily cannot be overstated.";
+
+  function escapeHtml(s) {
+    return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+  }
+
+  function updateCount() {
+    var n = ($("input").value.match(/[A-Za-z0-9'\u2019-]+/g) || []).length;
+    $("incount").textContent = n + " words";
+  }
+  $("input").addEventListener("input", updateCount);
+  $("loadSample").addEventListener("click", function () { $("input").value = SAMPLE; updateCount(); });
+
+  function scoreColor(score) {
+    if (score >= 82) return "var(--good)";
+    if (score >= 62) return "var(--sev2)";
+    return "var(--sev3)";
+  }
+
+  function dialSVG(score, size) {
+    var r = 54, c = 2 * Math.PI * r, frac = Math.max(0, Math.min(1, score / 100));
+    var col = scoreColor(score);
+    return '<svg class="dial" viewBox="0 0 132 132" width="' + size + '" height="' + size + '" role="img" aria-label="Sapien score ' + score + ' out of 100">' +
+      '<circle cx="66" cy="66" r="' + r + '" fill="none" stroke="var(--line)" stroke-width="9"/>' +
+      '<circle cx="66" cy="66" r="' + r + '" fill="none" stroke="' + col + '" stroke-width="9" stroke-linecap="round" stroke-dasharray="' + (c * frac).toFixed(1) + ' ' + c.toFixed(1) + '" transform="rotate(-90 66 66)"/>' +
+      '<text x="66" y="63" text-anchor="middle" font-size="30" fill="var(--ink)">' + score + '</text>' +
+      '<text x="66" y="84" text-anchor="middle" font-size="10" fill="var(--muted)" letter-spacing="2">SAPIEN</text></svg>';
+  }
+
+  function fmtRatio(v) { return v === null ? "n/a" : Math.round(v * 100) + "%"; }
+
+  function renderScore(a) {
+    var html = '<div class="scorecard">' + dialSVG(a.score, 132) +
+      '<div><div class="band" style="color:' + scoreColor(a.score) + '">' + a.band + '</div>' +
+      '<div class="bandnote">' + a.bandNote + '</div></div></div>' +
+      '<div class="metrics">' +
+      metric("Words", a.words, "") +
+      metric("Burstiness", a.burstiness.toFixed(2), "sentence-length variance; humans usually land 0.45+") +
+      metric("Contractions", fmtRatio(a.contractionRatio), "share of contractable spots you actually contract") +
+      metric("Em dashes", a.emDashes + " (" + a.emDashRate.toFixed(1) + "/1k)", "over 4 per 1,000 words reads machine") +
+      metric("Inline tells", a.inline.length, "flagged words and phrases") +
+      '</div>';
+    $("scoreArea").innerHTML = html;
+  }
+  function metric(k, v, hint) {
+    return '<div class="metric"><div class="k">' + k + '</div><div class="v">' + v + '</div>' + (hint ? '<div class="hint">' + hint + '</div>' : "") + '</div>';
+  }
+
+  function renderFindings(a) {
+    var rows = [];
+    a.global.forEach(function (g) {
+      rows.push('<div class="finding"><span class="chip s' + g.sev + '">' + (g.sev === 3 ? "strong" : g.sev === 2 ? "moderate" : "weak") + '</span>' +
+        '<div><div class="t">' + escapeHtml(g.label) + '</div><div class="d">' + escapeHtml(g.detail) + '</div></div></div>');
+    });
+    var tally = {};
+    a.inline.forEach(function (f) {
+      var key = f.label + "|" + f.sev + "|" + f.fix;
+      tally[key] = (tally[key] || 0) + 1;
+    });
+    Object.keys(tally).sort(function (x, y) { return Number(y.split("|")[1]) - Number(x.split("|")[1]); }).forEach(function (key) {
+      var p = key.split("|");
+      rows.push('<div class="finding"><span class="chip s' + p[1] + '">' + (p[1] === "3" ? "strong" : p[1] === "2" ? "moderate" : "weak") + '</span>' +
+        '<div><div class="t">' + escapeHtml(p[0]) + '</div><div class="d">try: ' + escapeHtml(p[2]) + '</div></div>' +
+        '<span class="tally">\u00D7' + tally[key] + '</span></div>');
+    });
+    $("findingsArea").innerHTML = rows.length ? rows.join("") : '<div class="empty">Clean. No document-level flags, no phrase tells.</div>';
+  }
+
+  function renderSpecimen(text, a) {
+    var spans = [];
+    var lastEnd = -1;
+    a.inline.forEach(function (f) {
+      if (f.start >= lastEnd) { spans.push(f); lastEnd = f.end; }
+    });
+    var out = [], cursor = 0;
+    spans.forEach(function (f) {
+      out.push(escapeHtml(text.slice(cursor, f.start)));
+      var tip = f.label + " \u00B7 " + f.fix;
+      out.push('<mark class="s' + f.sev + '" data-tip="' + escapeHtml(tip) + '" title="' + escapeHtml(tip) + '" tabindex="0">' + escapeHtml(text.slice(f.start, f.end)) + '</mark>');
+      cursor = f.end;
+    });
+    out.push(escapeHtml(text.slice(cursor)));
+    $("specArea").innerHTML = '<div class="specimen">' + out.join("") + '</div>';
+  }
+
+  $("analyzeBtn").addEventListener("click", function () {
+    var text = $("input").value.trim();
+    if (!text) { $("scoreArea").innerHTML = '<div class="empty">Paste something first.</div>'; return; }
+    lastText = text;
+    lastAnalysis = analyzeText(text);
+    renderScore(lastAnalysis);
+    renderFindings(lastAnalysis);
+    renderSpecimen(text, lastAnalysis);
+    $("rewriteBtn").disabled = false;
+    $("rwStatus").textContent = "";
+    $("rwStatus").className = "status";
+    $("rwResult").classList.add("hidden");
+  });
+
+  var PERSONAS = {
+    pm: "Project manager, 52, California. Leads with the decision, the date, or the owner. Short declarative sentences; first-person plural for team work. Concrete nouns: deadlines, budgets, tradeoffs. Allergic to hype adjectives. American English.",
+    eng: "Software engineer, 28, India. Precise and economical. Technical terms used exactly, zero marketing gloss. Hedges only where uncertainty is real ('should hold up', 'worth benchmarking'). Prefers examples and numbers over abstractions. Indian professional English: direct, lightly formal, neutral.",
+    law: "Solicitor, 64, UK. Measured, carefully qualified claims. Longer sentences with disciplined subordination, never padded. Dry understatement over emphasis. British English spelling and idiom, used naturally rather than performed.",
+    sci: "Research scientist, 32, Florida. Evidence first: claims sized to the data, uncertainty stated plainly. Methods before conclusions. Precise quantities, minimal adjectives, no superlatives without a measurement. American English.",
+    auto: "Automotive engineer, 41, Germany. Specification-minded: units, tolerances, and test conditions named exactly. Direct statements without softening; understated conclusions that let the numbers argue. International professional English: correct, lightly formal, no decorative idioms.",
+    grad: "College graduate, 24, California. Casual but not sloppy. Short sentences, quick asides, first person freely. Concrete everyday references over jargon. Comfortable starting sentences with And or But. American English."
+  };
+
+  function personaSpec() {
+    var v = $("persona").value;
+    if (v === "custom") return $("personaCustom").value.trim();
+    return PERSONAS[v] || "";
+  }
+
+  $("persona").addEventListener("change", function () {
+    $("personaCustom").classList.toggle("hidden", $("persona").value !== "custom");
+  });
+
+  function buildPrompt(text, a, voice) {
+    var flagged = {};
+    a.inline.forEach(function (f) { flagged[f.label] = true; });
+    var persona = personaSpec();
+    var lines = [
+      "You are a line editor restoring a human author's voice to a draft. Rewrite the draft below.",
+      "Hard rules:",
+      "- Preserve every fact, claim, number, and name. Add nothing new. Keep length within 15% of the original.",
+      "- Remove these flagged patterns entirely: " + (Object.keys(flagged).join("; ") || "none flagged; still avoid stock AI phrasing") + ".",
+      (a.emDashRate > 2 ? "- Cut em dashes down to at most one; use commas, periods, or parentheses." : ""),
+      (a.contractionRatio !== null && a.contractionRatio < 0.45 ? "- Use contractions wherever a person would use them speaking." : ""),
+      (a.burstiness < 0.45 ? "- Vary sentence length hard: mix long sentences with short ones. Include at least one sentence under five words." : ""),
+      "- No stock transitions (moreover, furthermore, additionally, in conclusion). Connect ideas by logic or drop the connector.",
+      "- Prefer concrete specifics over abstract intensifiers.",
+      persona ? "Write in the register of this author persona. The persona shapes rhythm, word choice, hedging style, and spelling convention ONLY. Do not invent biographical details, credentials, anecdotes, opinions, or first-person experiences that are not already in the draft.\n<persona>\n" + persona + "\n</persona>" : "",
+      voice ? "Match the rhythm, vocabulary, and register of this writing sample from the author. Where the sample and the persona conflict, the sample wins.\n<voice_sample>\n" + voice + "\n</voice_sample>" : "",
+      "Return only the rewritten text. No preamble, no notes, no quotation marks around it.",
+      "<draft>\n" + text + "\n</draft>"
+    ];
+    return lines.filter(Boolean).join("\n");
+  }
+
+  function setStatus(msg, isErr) {
+    $("rwStatus").className = isErr ? "status err" : "status";
+    $("rwStatus").textContent = msg;
+  }
+
+  var PROVIDER_DEFAULTS = {
+    anthropic: { model: "claude-sonnet-4-6", keyHint: "sk-ant-..." },
+    openai: { model: "gpt-4o-mini", keyHint: "sk-..." },
+    openrouter: { model: "openai/gpt-4o-mini", keyHint: "sk-or-..." }
+  };
+
+  $("settingsBtn").addEventListener("click", function () {
+    $("keyRow").classList.toggle("hidden");
+  });
+
+  $("provider").addEventListener("change", function () {
+    var p = PROVIDER_DEFAULTS[$("provider").value];
+    $("modelName").value = p.model;
+    $("apiKey").placeholder = p.keyHint;
+  });
+
+  function withTimeout(promise, ms) {
+    var t;
+    var timeout = new Promise(function (resolve, reject) {
+      t = setTimeout(function () {
+        var e = new Error("Timed out");
+        e.name = "TimeoutError";
+        reject(e);
+      }, ms);
+    });
+    return Promise.race([promise, timeout]).finally(function () { clearTimeout(t); });
+  }
+
+  async function callModel(prompt, provider, apiKey, model, words) {
+    var dynTokens = Math.min(8000, Math.max(1200, Math.round(words * 2.2) + 400));
+    var url, headers = { "Content-Type": "application/json" }, body;
+    if (provider === "anthropic") {
+      url = "https://api.anthropic.com/v1/messages";
+      var maxTokens = 1000;
+      if (apiKey) {
+        headers["x-api-key"] = apiKey;
+        headers["anthropic-version"] = "2023-06-01";
+        headers["anthropic-dangerous-direct-browser-access"] = "true";
+        maxTokens = dynTokens;
+      }
+      body = { model: model, max_tokens: maxTokens, messages: [{ role: "user", content: prompt }] };
+    } else {
+      url = provider === "openai" ? "https://api.openai.com/v1/chat/completions" : "https://openrouter.ai/api/v1/chat/completions";
+      headers["Authorization"] = "Bearer " + apiKey;
+      body = { model: model, max_tokens: dynTokens, messages: [{ role: "user", content: prompt }] };
+    }
+    var resp = await withTimeout(fetch(url, { method: "POST", headers: headers, body: JSON.stringify(body) }), 90000);
+    if (!resp.ok) {
+      var detail = "";
+      try { var eb = await resp.json(); detail = (eb.error && eb.error.message) ? eb.error.message : ""; } catch (ig) {}
+      var err = new Error(detail || ("HTTP " + resp.status));
+      err.status = resp.status;
+      throw err;
+    }
+    var data = await resp.json();
+    if (provider === "anthropic") {
+      return {
+        text: (data.content || []).filter(function (b) { return b.type === "text"; }).map(function (b) { return b.text; }).join("\n").trim(),
+        truncated: data.stop_reason === "max_tokens"
+      };
+    }
+    var choice = (data.choices && data.choices[0]) || {};
+    return {
+      text: ((choice.message && choice.message.content) || "").trim(),
+      truncated: choice.finish_reason === "length"
+    };
+  }
+
+  function isNetworkError(e) {
+    return e.name === "TypeError" || /NetworkError|Failed to fetch|Load failed/i.test(e.message || "");
+  }
+
+  $("rewriteBtn").addEventListener("click", async function () {
+    if (!lastAnalysis) return;
+    var btn = $("rewriteBtn");
+    var apiKey = $("apiKey").value.trim();
+    var provider = $("provider").value;
+    var model = $("modelName").value.trim() || PROVIDER_DEFAULTS[provider].model;
+    var words = lastAnalysis.words;
+    if (provider !== "anthropic" && !apiKey) {
+      $("keyRow").classList.remove("hidden");
+      setStatus(provider + " always needs your own API key. Paste it above and click Rewrite again.", true);
+      return;
+    }
+    btn.disabled = true;
+    if (provider === "anthropic" && !apiKey && words > 650) {
+      setStatus("Rewriting\u2026 Note: keyless mode caps the response, so drafts over ~650 words may come back truncated. Run long pieces in sections, or add a key under API settings.", false);
+    } else {
+      setStatus("Rewriting\u2026", false);
+    }
+    try {
+      var out = await callModel(buildPrompt(lastText, lastAnalysis, $("voice").value.trim()), provider, apiKey, model, words);
+      if (!out.text) throw new Error("Empty response from the model");
+      var re = analyzeText(out.text);
+      $("rwText").textContent = out.text;
+      $("rwDelta").innerHTML = 'score ' + lastAnalysis.score + ' \u2192 <span class="up">' + re.score + '</span> \u00B7 ' + re.inline.length + ' tell' + (re.inline.length === 1 ? '' : 's') + ' remain';
+      $("rwResult").classList.remove("hidden");
+      if (out.truncated) {
+        setStatus("Output hit the token cap and was cut mid-draft. " + (apiKey ? "Split the draft and run in sections." : "Add an API key under API settings for a larger budget, or run in sections."), true);
+        if (!apiKey) $("keyRow").classList.remove("hidden");
+      } else if (re.score > lastAnalysis.score) {
+        setStatus("Done. Read it aloud once; keep only the lines that sound like you. 'Use as new specimen' runs another pass.", false);
+      } else {
+        setStatus("Done, but the score did not improve. Iterate once more or edit by hand from the findings list.", false);
+      }
+    } catch (e) {
+      if (provider === "anthropic" && !apiKey && isNetworkError(e)) {
+        $("keyRow").classList.remove("hidden");
+        setStatus("The keyless path only works inside a Claude artifact. Paste an API key above (or switch provider) and click Rewrite again.", true);
+      } else if (e.name === "TimeoutError") {
+        setStatus("Timed out after 90 seconds. Try again, or split the draft.", true);
+      } else if (e.status === 401 || e.status === 403) {
+        setStatus("The API rejected that key (" + e.status + "). Check the key and the provider selection, then retry.", true);
+      } else if (e.status === 404) {
+        setStatus("Model not found: '" + model + "'. Check the model name for " + provider + " and retry.", true);
+      } else if (e.status === 429) {
+        setStatus("Rate limited by the API. Wait a minute and retry.", true);
+      } else if (e.status === 529 || e.status === 503) {
+        setStatus("The API is overloaded right now. Retry in a moment.", true);
+      } else {
+        setStatus("Rewrite failed: " + e.message + ". The findings list works as a manual edit checklist meanwhile.", true);
+      }
+    } finally {
+      btn.disabled = false;
+    }
+  });
+
+  $("iterateBtn").addEventListener("click", function () {
+    var t = $("rwText").textContent;
+    if (!t) return;
+    $("input").value = t;
+    updateCount();
+    $("analyzeBtn").dispatchEvent(new Event("click"));
+    if (typeof $("input").scrollIntoView === "function") {
+      try { $("input").scrollIntoView({ behavior: "smooth", block: "start" }); } catch (e) { $("input").scrollIntoView(); }
+    }
+  });
+
+  $("copyBtn").addEventListener("click", function () {
+    var t = $("rwText").textContent;
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(t).then(function () { $("copyBtn").textContent = "Copied"; setTimeout(function () { $("copyBtn").textContent = "Copy"; }, 1500); });
+    } else {
+      var ta = document.createElement("textarea"); ta.value = t; document.body.appendChild(ta); ta.select();
+      try { document.execCommand("copy"); } catch (err) {}
+      document.body.removeChild(ta);
+      $("copyBtn").textContent = "Copied"; setTimeout(function () { $("copyBtn").textContent = "Copy"; }, 1500);
+    }
+  });
+})();
+</script>
+</body>
+</html>
