@@ -628,15 +628,19 @@ function analyzeText(text) {
   function buildPrompt(text, a, voice) {
     var flagged = {};
     a.inline.forEach(function (f) { flagged[f.label] = true; });
+    // the rest of the tell library: patterns the draft doesn't have and the rewrite must not add
+    var doNotAdd = [];
+    SAPIENIZE_TELLS.forEach(function (t) { if (!flagged[t.label] && doNotAdd.indexOf(t.label) === -1) doNotAdd.push(t.label); });
     var persona = personaSpec();
     var lines = [
       "You are a line editor restoring a human author's voice to a draft. Rewrite the draft below.",
       "Hard rules:",
       "- Preserve every fact, claim, number, and name. Add nothing new. Keep length within 15% of the original.",
       "- Remove these flagged patterns entirely: " + (Object.keys(flagged).join("; ") || "none flagged; still avoid stock AI phrasing") + ".",
-      (a.emDashRate > 2 ? "- Cut em dashes down to at most one; use commas, periods, or parentheses." : ""),
-      (a.contractionRatio !== null && a.contractionRatio < 0.45 ? "- Use contractions wherever a person would use them speaking." : ""),
-      (a.burstiness < 0.45 ? "- Vary sentence length hard: mix long sentences with short ones. Include at least one sentence under five words." : ""),
+      "- Do not introduce any of these patterns either: " + doNotAdd.join("; ") + ".",
+      (a.emDashRate > 2 ? "- Cut em dashes down to at most one; use commas, periods, or parentheses." : "- Do not add em dashes (—). The draft manages without them; where you want a pause, use a comma, a period, or parentheses."),
+      (a.contractionRatio !== null && a.contractionRatio < 0.45 ? "- Use contractions wherever a person would use them speaking." : "- Keep contractions at least as frequent as the draft has them; never expand one into its formal form."),
+      (a.burstiness < 0.45 ? "- Vary sentence length hard: mix long sentences with short ones. Include at least one sentence under five words." : "- Keep sentence lengths as varied as the draft; do not even them out."),
       "- No stock transitions (moreover, furthermore, additionally, in conclusion). Connect ideas by logic or drop the connector.",
       "- Prefer concrete specifics over abstract intensifiers.",
       persona ? "Write in the register of this author persona. The persona shapes rhythm, word choice, hedging style, and spelling convention ONLY. Do not invent biographical details, credentials, anecdotes, opinions, or first-person experiences that are not already in the draft.\n<persona>\n" + persona + "\n</persona>" : "",

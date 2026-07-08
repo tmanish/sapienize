@@ -16,6 +16,13 @@ setTimeout(() => {
   let prompt = JSON.parse(captured.body).messages[0].content;
   assert(/Solicitor, 64, UK/.test(prompt), "preset persona spec lands in prompt");
   assert(/Do not invent biographical details/.test(prompt), "no-fabrication guard present");
+  // regression: rules against introducing new tells must always be present
+  assert(/Do not add em dashes/.test(prompt), "em dash ban present even when the draft has none");
+  assert(/never expand one into its formal form|Use contractions wherever/.test(prompt), "contraction rule always present");
+  assert(/Keep sentence lengths as varied|Vary sentence length hard/.test(prompt), "rhythm rule always present");
+  const noAdd = prompt.split("\n").find(l => l.indexOf("- Do not introduce any of these patterns") === 0) || "";
+  assert(noAdd.indexOf("secret sauce") !== -1, "do-not-introduce list covers the rest of the tell library");
+  assert(noAdd.indexOf("delve") === -1 && /Remove these flagged patterns[^\n]*delve/.test(prompt), "flagged tells stay in the remove list, not the do-not-introduce list");
   // custom persona path
   d.getElementById("persona").value = "custom";
   d.getElementById("persona").dispatchEvent(new w.Event("change"));

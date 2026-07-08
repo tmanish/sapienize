@@ -1,5 +1,6 @@
 .DS_Store
 node_modules/
+.claude/
 
 # superseded: source now lives in src/, tests/, skill/, .github/
 sapienize-devkit.zip
