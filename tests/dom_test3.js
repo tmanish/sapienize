@@ -17,7 +17,7 @@ setTimeout(() => {
   assert(/Solicitor, 64, UK/.test(prompt), "preset persona spec lands in prompt");
   assert(/Do not invent biographical details/.test(prompt), "no-fabrication guard present");
   // regression: rules against introducing new tells must always be present
-  assert(/Do not add em dashes/.test(prompt), "em dash ban present even when the draft has none");
+  assert(/zero em dashes/.test(prompt), "zero-em-dash rule always present");
   assert(/never expand one into its formal form|Use contractions wherever/.test(prompt), "contraction rule always present");
   assert(/Keep sentence lengths as varied|Vary sentence length hard/.test(prompt), "rhythm rule always present");
   const noAdd = prompt.split("\n").find(l => l.indexOf("- Do not introduce any of these patterns") === 0) || "";

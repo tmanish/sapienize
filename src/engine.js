@@ -143,6 +143,36 @@ const SAPIENIZE_TELLS = [
 let SENT_RE = null;
 try { SENT_RE = new RegExp("(?<=[.!?])\\s+(?=[A-Z\"'(\\[])"); } catch (e) { SENT_RE = null; }
 
+// Invisible characters (zero-width space/joiner, word joiner, BOM, soft hyphen):
+// inserting these inside words is a known trick to dodge text scanners.
+const HIDDEN_RE = /[\u200B\u200C\u200D\u2060\uFEFF\u00AD]/g;
+
+// Normalize the specimen before any scan so typographic variants (curly quotes,
+// exotic spaces) and evasion characters can't slip a tell past the regexes.
+// Em and en dashes are deliberately NOT normalized: they are signals we count.
+function normalizeForScan(text) {
+  const hidden = (text.match(HIDDEN_RE) || []).length;
+  const clean = text
+    .replace(/\r\n?/g, "\n")
+    .replace(HIDDEN_RE, "")
+    .replace(/[\u2018\u2019\u02BC\u201B]/g, "'")
+    .replace(/[\u201C\u201D\u201F]/g, '"')
+    .replace(/[\u00A0\u2000-\u200A\u202F\u205F]/g, " ");
+  return { text: clean, hidden: hidden };
+}
+
+// Deterministic post-pass for rewrites: remove every em dash, whatever the model
+// did. Hard rules live in code; prompts only reduce how much cleanup happens here.
+function sanitizeRewrite(text) {
+  let out = text.replace(/[ \t]*—+[ \t]*/g, ", ");
+  out = out.replace(/,\s+,/g, ",");
+  out = out.replace(/,\s*([.,;:!?])/g, "$1");
+  out = out.replace(/^[ \t]*,[ \t]*/gm, "");
+  out = out.replace(/[ \t]+\n/g, "\n");
+  out = out.replace(/[ \t]{2,}/g, " ");
+  return out;
+}
+
 function splitSentences(text) {
   const clean = text.replace(/\r/g, "");
   if (SENT_RE) {
@@ -170,7 +200,9 @@ function stddev(arr) {
   return Math.sqrt(v);
 }
 
-function analyzeText(text) {
+function analyzeText(input) {
+  const norm = normalizeForScan(input);
+  const text = norm.text;
   const findings = [];
   const words = wordCount(text);
   const sentences = splitSentences(text);
@@ -241,6 +273,7 @@ function analyzeText(text) {
 
   // Structural findings (document-level, no span)
   const global = [];
+  if (norm.hidden > 0) global.push({ label: "invisible characters", cat: "evasion", sev: 3, detail: norm.hidden + " zero-width or invisible character(s) found and stripped before analysis. Inserting them is a common trick to fool AI-text scanners; a straight draft doesn't need them.", metric: norm.hidden });
   if (emDashRate > 4) global.push({ label: "em dash overuse", cat: "punctuation", sev: 3, detail: emDashes + " em dashes (" + emDashRate.toFixed(1) + " per 1,000 words). Current AI models lean on these hard. Swap most for commas, periods, or parentheses.", metric: emDashRate });
   else if (emDashRate > 2) global.push({ label: "em dash frequency", cat: "punctuation", sev: 1, detail: emDashes + " em dashes. Borderline; keep only the ones doing real work.", metric: emDashRate });
   if (semiRate > 5) global.push({ label: "semicolon density", cat: "punctuation", sev: 1, detail: semis + " semicolons. Fine if that is your style; AI overuses them in casual registers.", metric: semiRate });
@@ -268,6 +301,7 @@ function analyzeText(text) {
   else { band = "Heavy AI fingerprint"; bandNote = "Rewrite rather than patch. Read it aloud and retype it the way you'd say it."; }
 
   return {
+    text: text,
     words: words,
     sentences: sentences.length,
     meanLen: meanLen,
@@ -283,4 +317,4 @@ function analyzeText(text) {
   };
 }
 
-if (typeof module !== "undefined") { module.exports = { analyzeText: analyzeText, SAPIENIZE_TELLS: SAPIENIZE_TELLS, splitSentences: splitSentences }; }
+if (typeof module !== "undefined") { module.exports = { analyzeText: analyzeText, SAPIENIZE_TELLS: SAPIENIZE_TELLS, splitSentences: splitSentences, sanitizeRewrite: sanitizeRewrite, normalizeForScan: normalizeForScan }; }

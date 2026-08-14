@@ -94,7 +94,8 @@ Severity 3 = near-certain machine accent, always remove. Severity 2 = strong sig
 ## 4. Voice tells
 
 - **Missing contractions** (sev 3 when near-total): "do not," "it is," "cannot" everywhere reads machine-formal. Contract wherever the author would when speaking, unless their sample is formal.
-- **Em dash overuse** (sev 3): more than ~4 per 1,000 words. Keep at most one per 500 words; convert the rest to commas, periods, or parentheses.
+- **Em dash overuse** (sev 3): more than ~4 per 1,000 words. The restored draft ships with zero: convert every one to a comma, a period, or parentheses.
+- **Invisible characters** (sev 3): zero-width spaces or joiners inside words are scanner-evasion residue, not writing. Strip them.
 - **Semicolon density in casual registers** (sev 1).
 - **Abstract intensifiers** (sev 2): "significantly improved," "greatly enhanced." Replace with the number or the concrete effect.
 - **No first person in a personal piece** (sev 2): if the piece claims experience, the author should appear in it. Add the I: the mistake made, the thing tried, the opinion held.

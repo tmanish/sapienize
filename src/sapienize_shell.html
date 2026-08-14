@@ -109,7 +109,7 @@
   <header>
     <div class="brand">
       <div class="wordmark">SAPIEN<span class="flip">IZE</span></div>
-      <div class="eyebrow">Text forensics · v1.1</div>
+      <div class="eyebrow">Text forensics · v1.2</div>
     </div>
     <div style="text-align:right;">
       <div class="tagline">Find the machine accent in your draft. Restore your own voice.</div>
@@ -309,11 +309,11 @@
   $("analyzeBtn").addEventListener("click", function () {
     var text = $("input").value.trim();
     if (!text) { $("scoreArea").innerHTML = '<div class="empty">Paste something first.</div>'; return; }
-    lastText = text;
     lastAnalysis = analyzeText(text);
+    lastText = lastAnalysis.text; // normalized: curly quotes unified, evasion characters stripped
     renderScore(lastAnalysis);
     renderFindings(lastAnalysis);
-    renderSpecimen(text, lastAnalysis);
+    renderSpecimen(lastText, lastAnalysis);
     $("rewriteBtn").disabled = false;
     $("rwStatus").textContent = "";
     $("rwStatus").className = "status";
@@ -339,6 +339,16 @@
     $("personaCustom").classList.toggle("hidden", $("persona").value !== "custom");
   });
 
+  // Measure the author's sample and hand the model numbers, not adjectives.
+  function voiceMetrics(voice) {
+    if (!voice) return "";
+    var vm = analyzeText(voice);
+    if (vm.sentences < 3) return "";
+    var parts = ["average sentence length about " + Math.round(vm.meanLen) + " words", "burstiness " + vm.burstiness.toFixed(2)];
+    if (vm.contractionRatio !== null) parts.push("contraction rate " + Math.round(vm.contractionRatio * 100) + "%");
+    return "- Match the author's measured habits: " + parts.join(", ") + ".";
+  }
+
   function buildPrompt(text, a, voice) {
     var flagged = {};
     a.inline.forEach(function (f) { flagged[f.label] = true; });
@@ -352,9 +362,10 @@
       "- Preserve every fact, claim, number, and name. Add nothing new. Keep length within 15% of the original.",
       "- Remove these flagged patterns entirely: " + (Object.keys(flagged).join("; ") || "none flagged; still avoid stock AI phrasing") + ".",
       "- Do not introduce any of these patterns either: " + doNotAdd.join("; ") + ".",
-      (a.emDashRate > 2 ? "- Cut em dashes down to at most one; use commas, periods, or parentheses." : "- Do not add em dashes (—). The draft manages without them; where you want a pause, use a comma, a period, or parentheses."),
+      "- Use zero em dashes (—). Every pause becomes a comma, a period, or parentheses.",
       (a.contractionRatio !== null && a.contractionRatio < 0.45 ? "- Use contractions wherever a person would use them speaking." : "- Keep contractions at least as frequent as the draft has them; never expand one into its formal form."),
       (a.burstiness < 0.45 ? "- Vary sentence length hard: mix long sentences with short ones. Include at least one sentence under five words." : "- Keep sentence lengths as varied as the draft; do not even them out."),
+      voiceMetrics(voice),
       "- No stock transitions (moreover, furthermore, additionally, in conclusion). Connect ideas by logic or drop the connector.",
       "- Prefer concrete specifics over abstract intensifiers.",
       persona ? "Write in the register of this author persona. The persona shapes rhythm, word choice, hedging style, and spelling convention ONLY. Do not invent biographical details, credentials, anecdotes, opinions, or first-person experiences that are not already in the draft.\n<persona>\n" + persona + "\n</persona>" : "",
@@ -461,19 +472,33 @@
       setStatus("Rewriting\u2026", false);
     }
     try {
-      var out = await callModel(buildPrompt(lastText, lastAnalysis, $("voice").value.trim()), provider, apiKey, model, words);
-      if (!out.text) throw new Error("Empty response from the model");
-      var re = analyzeText(out.text);
-      $("rwText").textContent = out.text;
-      $("rwDelta").innerHTML = 'score ' + lastAnalysis.score + ' \u2192 <span class="up">' + re.score + '</span> \u00B7 ' + re.inline.length + ' tell' + (re.inline.length === 1 ? '' : 's') + ' remain';
+      // Converge: rewrite, sanitize, re-scan; go again while strong tells or a weak
+      // score remain, up to 3 passes. Keep the best-scoring pass. Em dashes are
+      // removed in code by sanitizeRewrite regardless of what the model returns.
+      var voiceSample = $("voice").value.trim();
+      var draft = lastText, draftAnalysis = lastAnalysis, best = null, passes = 0;
+      for (var pass = 1; pass <= 3; pass++) {
+        passes = pass;
+        if (pass > 1) setStatus("Pass " + pass + "/3: clearing what pass " + (pass - 1) + " left behind\u2026", false);
+        var out = await callModel(buildPrompt(draft, draftAnalysis, voiceSample), provider, apiKey, model, words);
+        if (!out.text) throw new Error("Empty response from the model");
+        var re = analyzeText(sanitizeRewrite(out.text));
+        if (!best || re.score > best.analysis.score) best = { analysis: re, truncated: out.truncated };
+        var sev3left = re.inline.filter(function (f) { return f.sev === 3; }).length;
+        if ((re.score >= 82 && sev3left === 0) || out.truncated) break;
+        draft = re.text; draftAnalysis = re;
+      }
+      var fin = best.analysis;
+      $("rwText").textContent = fin.text;
+      $("rwDelta").innerHTML = 'score ' + lastAnalysis.score + ' \u2192 <span class="up">' + fin.score + '</span> \u00B7 ' + fin.inline.length + ' tell' + (fin.inline.length === 1 ? '' : 's') + ' remain \u00B7 ' + passes + ' pass' + (passes === 1 ? '' : 'es');
       $("rwResult").classList.remove("hidden");
-      if (out.truncated) {
+      if (best.truncated) {
         setStatus("Output hit the token cap and was cut mid-draft. " + (apiKey ? "Split the draft and run in sections." : "Add an API key under API settings for a larger budget, or run in sections."), true);
         if (!apiKey) $("keyRow").classList.remove("hidden");
-      } else if (re.score > lastAnalysis.score) {
-        setStatus("Done. Read it aloud once; keep only the lines that sound like you. 'Use as new specimen' runs another pass.", false);
+      } else if (fin.score > lastAnalysis.score) {
+        setStatus("Done in " + passes + " pass" + (passes === 1 ? "" : "es") + ", zero em dashes. Read it aloud once; keep only the lines that sound like you.", false);
       } else {
-        setStatus("Done, but the score did not improve. Iterate once more or edit by hand from the findings list.", false);
+        setStatus("Ran " + passes + " passes but the score did not improve. Edit by hand from the findings list, or try a stronger rewrite model under API settings.", false);
       }
     } catch (e) {
       if (provider === "anthropic" && !apiKey && isNetworkError(e)) {

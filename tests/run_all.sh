@@ -5,5 +5,5 @@ cd "$(dirname "$0")/.."
 python3 build.py
 node --check src/engine.js
 cd tests
-for t in test_engine dom_test dom_test2 dom_test3 dom_test4 dom_test5; do node "$t.js"; done
+for t in test_engine dom_test dom_test2 dom_test3 dom_test4 dom_test5 dom_test6; do node "$t.js"; done
 echo "ALL SUITES GREEN"

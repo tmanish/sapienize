@@ -7,7 +7,7 @@ import re, pathlib, zipfile
 
 root = pathlib.Path(__file__).parent
 
-EXPORT_LINE = 'if (typeof module !== "undefined") { module.exports = { analyzeText: analyzeText, SAPIENIZE_TELLS: SAPIENIZE_TELLS, splitSentences: splitSentences }; }'
+EXPORT_LINE = 'if (typeof module !== "undefined") { module.exports = { analyzeText: analyzeText, SAPIENIZE_TELLS: SAPIENIZE_TELLS, splitSentences: splitSentences, sanitizeRewrite: sanitizeRewrite, normalizeForScan: normalizeForScan }; }'
 
 shell = (root / "src/sapienize_shell.html").read_text()
 engine = (root / "src/engine.js").read_text()

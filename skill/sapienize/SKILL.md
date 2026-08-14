@@ -45,7 +45,7 @@ Rules, in priority order:
 4. Contract wherever the author would contract out loud, unless the voice sample is formal.
 5. Match the voice sample: sentence length habits, favorite connectors, punctuation habits, register, and any recurring idiom. Borrow its habits, not its sentences.
 6. Prefer concrete specifics over abstract intensifiers: replace "significantly improved" with the number, "a wide range of" with three named items.
-7. Keep at most one em dash per 500 words. American English unless the draft, sample, or persona says otherwise.
+7. Use zero em dashes: convert each one to a comma, a period, or parentheses. American English unless the draft, sample, or persona says otherwise.
 8. **Files and artifacts**: when the draft is a file, edit the prose in place and return the updated file, not a chat transcript of it. Rewrite only human-readable prose: paragraphs, headings, README body, docstrings and comments if asked. Never alter code logic, markup structure, tags, attributes, links, front matter keys, or data. For HTML, rewrite visible copy inside elements and leave everything else byte-identical where possible.
 9. **Persona register**: apply the derived spec consistently across the whole piece: spelling convention, hedging style, sentence habits. Style only; zero fabricated facts.
 
@@ -56,9 +56,11 @@ Re-run the Step 2 scan on the rewrite. Convergence criteria:
 - Zero severity-3 lexical tells remain.
 - No Moreover/Furthermore/Additionally sentence openers.
 - Sentence lengths visibly vary (at least one sentence of 6 words or fewer, at least one over 25, in any piece longer than 150 words).
-- Em dash count within budget.
+- Zero em dashes remain.
 
 If any criterion fails, refine and re-scan. Maximum 3 passes. If the same criterion fails twice, replan: rewrite that section from scratch instead of patching it. Report the pass count honestly.
+
+As a final sweep, reread once asking: which single sentence still sounds most machine-made? Fix that one even if no checklist row names it.
 
 ## Step 6: Deliver
 

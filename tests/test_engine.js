@@ -1,5 +1,5 @@
 "use strict";
-const { analyzeText } = require("../src/engine.js");
+const { analyzeText, sanitizeRewrite } = require("../src/engine.js");
 
 const aiText = `In today's fast-paced digital landscape, artificial intelligence stands as a testament to human ingenuity. It is important to note that AI is not just a tool; it is a paradigm shift. Whether you're a developer or a designer, leveraging these cutting-edge solutions can unlock the potential of your workflow. Moreover, AI can streamline processes, foster collaboration, and elevate your productivity. Furthermore, it is crucial to delve into the myriad of possibilities. Additionally, organizations cannot afford to ignore this game-changer. In conclusion, the transformative power of AI cannot be overstated. It serves as a beacon of innovation \u2014 seamless, robust, and holistic \u2014 navigating the complexities of the ever-evolving world of technology. Ultimately, embracing AI is pivotal for stakeholders seeking actionable insights.`;
 
@@ -34,4 +34,19 @@ const inner = analyzeText("It was not only seamless but also fast.");
 assert(inner.inline.length === 1 && inner.inline[0].label === "seamless", "higher-severity inner tell beats weaker containing span (got " + inner.inline.map(f => f.label).join(", ") + ")");
 const apart = analyzeText("We leverage a robust pipeline.");
 assert(apart.inline.length === 2, "non-overlapping tells are all kept (got " + apart.inline.length + ")");
+
+// Unicode robustness: typographic variants and evasion characters cannot dodge the scan.
+const straight = "Whether you're a designer or a developer, let's explore the tooling. Here's the thing.";
+const curly = straight.replace(/'/g, "’");
+const labelsOf = r => JSON.stringify(r.inline.map(f => f.label));
+assert(labelsOf(analyzeText(straight)) === labelsOf(analyzeText(curly)), "curly apostrophes produce identical findings to straight ones");
+const zw = analyzeText("We de​lve into a sea​mless plan.");
+assert(zw.inline.some(f => f.label === "delve") && zw.inline.some(f => f.label === "seamless"), "zero-width characters cannot hide a tell");
+assert(zw.global.some(g => g.label === "invisible characters" && g.sev === 3), "hidden characters are themselves flagged as a strong tell");
+assert(zw.inline.every(f => zw.text.slice(f.start, f.end) === f.snippet), "spans map exactly onto the normalized text");
+
+// Sanitizer: em dash removal is a code guarantee, not a model behavior.
+assert(sanitizeRewrite("A — B—C —.") === "A, B, C.", "em dashes collapse to commas without punctuation artifacts (got '" + sanitizeRewrite("A — B—C —.") + "')");
+assert(sanitizeRewrite("One — two.\n\nThree — four.") === "One, two.\n\nThree, four.", "paragraph breaks survive sanitizing");
+assert(analyzeText(sanitizeRewrite("Plan — test — ship — repeat — always.")).emDashes === 0, "sanitized text always counts zero em dashes");
 process.exit(fail ? 1 : 0);
