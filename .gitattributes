@@ -1,2 +1,4 @@
-# Auto detect text files and perform LF normalization
-* text=auto
+# Pin repository text to LF so source-derived release artifacts are identical
+# across Unix and Windows checkouts. The generated skill is a binary ZIP.
+* text=auto eol=lf
+*.skill -text

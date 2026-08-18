@@ -29,10 +29,10 @@ jobs:
               title: `Tell refresh ${new Date().toISOString().slice(0,10)}`,
               body: [
                 "Biweekly maintenance loop:",
-                "1. Generate 3 fresh samples from current models (one blog post, one technical explainer, one email).",
-                "2. Run each through sapienize.html. Note phrasing that reads AI but went unflagged.",
-                "3. Add new entries to SAPIENIZE_TELLS in src/engine.js and skill/sapienize/references/tells.md.",
-                "4. Retire entries current models no longer produce.",
+                "1. Curate legally usable examples across multiple authors, domains, and current models.",
+                "2. Run each through sapienize.html. Record contextual false positives, missed recurring patterns, and author-specific counterexamples.",
+                "3. Add only explainable stylistic entries to SAPIENIZE_TELLS and tells.md, with review guidance rather than authorship claims.",
+                "4. Retire entries that lack recurring evidence or create disproportionate false positives.",
                 "5. python3 build.py && bash tests/run_all.sh, then commit and tag."
               ].join("\n")
             });

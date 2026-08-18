@@ -1,8 +1,12 @@
-/* Sapienize engine v1.0 - pure functions, no DOM. */
+/* Sapienize legacy engine facade - pure functions, no DOM. */
 "use strict";
 
+var SAPIENIZE_SCORING = (typeof module === "object" && module.exports)
+  ? require("./analysis/scoring.js")
+  : SapienizeScoring;
+
 const SAPIENIZE_TELLS = [
-  // sev 3: near-certain AI vocabulary
+  // Severity 3: high-priority patterns in the legacy style heuristic.
   { re: /\bdelv(?:e|es|ed|ing)\b/gi, label: "delve", cat: "lexical", sev: 3, fix: "dig into / look at / examine" },
   { re: /\b(?:rich\s+)?tapestry\b/gi, label: "tapestry", cat: "lexical", sev: 3, fix: "mix / range / variety" },
   { re: /\ba testament to\b/gi, label: "a testament to", cat: "lexical", sev: 3, fix: "shows / proves" },
@@ -142,13 +146,16 @@ const SAPIENIZE_TELLS = [
 
 let SENT_RE = null;
 try { SENT_RE = new RegExp("(?<=[.!?])\\s+(?=[A-Z\"'(\\[])"); } catch (e) { SENT_RE = null; }
+let WORD_RE = null;
+try { WORD_RE = new RegExp("[\\p{L}\\p{N}]+(?:['’-][\\p{L}\\p{N}]+)*", "gu"); }
+catch (e) { WORD_RE = /[A-Za-z0-9'’-]+/g; }
 
 // Invisible characters (zero-width space/joiner, word joiner, BOM, soft hyphen):
-// inserting these inside words is a known trick to dodge text scanners.
+// These can alter tokenization or be accidental document-formatting residue.
 const HIDDEN_RE = /[\u200B\u200C\u200D\u2060\uFEFF\u00AD]/g;
 
 // Normalize the specimen before any scan so typographic variants (curly quotes,
-// exotic spaces) and evasion characters can't slip a tell past the regexes.
+// exotic spaces) and invisible integrity characters do not alter tell matching.
 // Em and en dashes are deliberately NOT normalized: they are signals we count.
 function normalizeForScan(text) {
   const hidden = (text.match(HIDDEN_RE) || []).length;
@@ -161,8 +168,9 @@ function normalizeForScan(text) {
   return { text: clean, hidden: hidden };
 }
 
-// Deterministic post-pass for rewrites: remove every em dash, whatever the model
-// did. Hard rules live in code; prompts only reduce how much cleanup happens here.
+// Legacy deterministic post-pass retained for API compatibility. The v2 rewrite
+// pipeline does not call this automatically because punctuation should follow a
+// supplied voice profile rather than a universal rule.
 function sanitizeRewrite(text) {
   let out = text.replace(/[ \t]*—+[ \t]*/g, ", ");
   out = out.replace(/,\s+,/g, ",");
@@ -189,7 +197,8 @@ function splitSentences(text) {
 }
 
 function wordCount(text) {
-  const m = text.match(/[A-Za-z0-9'\u2019-]+/g);
+  WORD_RE.lastIndex = 0;
+  const m = text.match(WORD_RE);
   return m ? m.length : 0;
 }
 
@@ -273,32 +282,25 @@ function analyzeText(input) {
 
   // Structural findings (document-level, no span)
   const global = [];
-  if (norm.hidden > 0) global.push({ label: "invisible characters", cat: "evasion", sev: 3, detail: norm.hidden + " zero-width or invisible character(s) found and stripped before analysis. Inserting them is a common trick to fool AI-text scanners; a straight draft doesn't need them.", metric: norm.hidden });
-  if (emDashRate > 4) global.push({ label: "em dash overuse", cat: "punctuation", sev: 3, detail: emDashes + " em dashes (" + emDashRate.toFixed(1) + " per 1,000 words). Current AI models lean on these hard. Swap most for commas, periods, or parentheses.", metric: emDashRate });
-  else if (emDashRate > 2) global.push({ label: "em dash frequency", cat: "punctuation", sev: 1, detail: emDashes + " em dashes. Borderline; keep only the ones doing real work.", metric: emDashRate });
-  if (semiRate > 5) global.push({ label: "semicolon density", cat: "punctuation", sev: 1, detail: semis + " semicolons. Fine if that is your style; AI overuses them in casual registers.", metric: semiRate });
-  if (contractionRatio !== null && contractionRatio < 0.25 && (contractions + formalPairs) >= 6) global.push({ label: "almost no contractions", cat: "voice", sev: 3, detail: "Contraction ratio " + Math.round(contractionRatio * 100) + "%. Formal expansions like 'do not' and 'it is' everywhere reads machine-formal. Contract where you'd contract out loud.", metric: contractionRatio });
-  else if (contractionRatio !== null && contractionRatio < 0.45 && (contractions + formalPairs) >= 6) global.push({ label: "low contraction rate", cat: "voice", sev: 1, detail: "Contraction ratio " + Math.round(contractionRatio * 100) + "%. Slightly stiff.", metric: contractionRatio });
-  if (burstiness < 0.32 && sentLens.length >= 6) global.push({ label: "flat sentence rhythm", cat: "rhythm", sev: 3, detail: "Burstiness " + burstiness.toFixed(2) + ". Sentences are all similar lengths. Humans mix long runs with short punches. Break some up. Add a two-word sentence.", metric: burstiness });
-  else if (burstiness < 0.45 && sentLens.length >= 6) global.push({ label: "even sentence rhythm", cat: "rhythm", sev: 1, detail: "Burstiness " + burstiness.toFixed(2) + ". Some variety, could use more contrast.", metric: burstiness });
+  if (norm.hidden > 0) global.push({ label: "invisible characters", cat: "document_integrity", sev: 3, detail: norm.hidden + " zero-width or invisible character(s) found and stripped before analysis. Review the source document to determine why they are present.", metric: norm.hidden });
+  if (emDashRate > 4) global.push({ label: "high em dash frequency", cat: "punctuation", sev: 3, detail: emDashes + " em dashes (" + emDashRate.toFixed(1) + " per 1,000 words), above this configured style threshold. Compare with the author's VoiceProfile before revising.", metric: emDashRate });
+  else if (emDashRate > 2) global.push({ label: "em dash frequency", cat: "punctuation", sev: 1, detail: emDashes + " em dashes. Review in context and compare with the author's punctuation habits.", metric: emDashRate });
+  if (semiRate > 5) global.push({ label: "semicolon density", cat: "punctuation", sev: 1, detail: semis + " semicolons. This may be normal in the author's register; compare with the VoiceProfile.", metric: semiRate });
+  if (contractionRatio !== null && contractionRatio < 0.25 && (contractions + formalPairs) >= 6) global.push({ label: "almost no contractions", cat: "voice", sev: 3, detail: "Contraction ratio " + Math.round(contractionRatio * 100) + "%. This is a formal-register signal; compare it with the authentic VoiceProfile rather than contracting automatically.", metric: contractionRatio });
+  else if (contractionRatio !== null && contractionRatio < 0.45 && (contractions + formalPairs) >= 6) global.push({ label: "low contraction rate", cat: "voice", sev: 1, detail: "Contraction ratio " + Math.round(contractionRatio * 100) + "%. Review against the intended register and VoiceProfile.", metric: contractionRatio });
+  if (burstiness < 0.32 && sentLens.length >= 6) global.push({ label: "flat sentence rhythm", cat: "rhythm", sev: 3, detail: "Burstiness " + burstiness.toFixed(2) + ". Sentence lengths are similar; compare this distribution with the authentic VoiceProfile.", metric: burstiness });
+  else if (burstiness < 0.45 && sentLens.length >= 6) global.push({ label: "even sentence rhythm", cat: "rhythm", sev: 1, detail: "Burstiness " + burstiness.toFixed(2) + ". Sentence-length variation is modest; review in context.", metric: burstiness });
   if (monotoneRuns > 0) global.push({ label: "monotone stretches", cat: "rhythm", sev: 2, detail: monotoneRuns + " run(s) of 3+ back-to-back sentences of nearly identical length.", metric: monotoneRuns });
   if (triadShare > 0.18 && sentences.length >= 8) global.push({ label: "rule-of-three overload", cat: "structure", sev: 2, detail: triads + " of " + sentences.length + " sentences use an 'X, Y, and Z' triple. One is rhetoric. Six is a pattern.", metric: triadShare });
   if (repeatedOpeners.length > 0) global.push({ label: "repeated sentence openers", cat: "rhythm", sev: 1, detail: "3+ sentences each start with: " + repeatedOpeners.join(", ") + ".", metric: repeatedOpeners.length });
-  if (paraUniform) global.push({ label: "uniform paragraph blocks", cat: "structure", sev: 2, detail: "Every paragraph is nearly the same size. Human paragraphs sprawl and shrink with the idea.", metric: 1 });
+  if (paraUniform) global.push({ label: "uniform paragraph blocks", cat: "structure", sev: 2, detail: "Paragraphs are nearly the same size. This can be intentional; compare with the format and VoiceProfile.", metric: 1 });
 
-  // Score
-  let penalty = 0;
-  inline.forEach(function (f) { penalty += f.sev * 1.4; });
-  // scale inline penalty by document length so one 'crucial' in 2,000 words doesn't tank it
-  if (words > 0) penalty = penalty * Math.min(1, 400 / Math.max(words, 120));
-  global.forEach(function (g) { penalty += g.sev * 4; });
-  const score = Math.max(4, Math.min(100, Math.round(100 - penalty)));
-
-  let band, bandNote;
-  if (score >= 82) { band = "Reads human"; bandNote = "Natural rhythm, personal voice. Light touch-ups at most."; }
-  else if (score >= 62) { band = "Light AI accent"; bandNote = "Mostly fine. A handful of tells to clear."; }
-  else if (score >= 40) { band = "Noticeable AI patterns"; bandNote = "A careful pass will fix this. Focus on the red flags first."; }
-  else { band = "Heavy AI fingerprint"; bandNote = "Rewrite rather than patch. Read it aloud and retype it the way you'd say it."; }
+  // Backward-compatible numeric alias. This is explicitly an uncalibrated style
+  // heuristic, never a probability of human authorship.
+  const scoreInfo = SAPIENIZE_SCORING.scoreStyleSignals({ words: words, inline: inline, global: global });
+  const score = scoreInfo.value;
+  const band = scoreInfo.band;
+  const bandNote = scoreInfo.note;
 
   return {
     text: text,
@@ -311,10 +313,13 @@ function analyzeText(input) {
     contractionRatio: contractionRatio,
     inline: inline,
     global: global,
+    heuristicStyleScore: score,
+    scoreInfo: scoreInfo,
     score: score,
     band: band,
     bandNote: bandNote
   };
 }
 
-if (typeof module !== "undefined") { module.exports = { analyzeText: analyzeText, SAPIENIZE_TELLS: SAPIENIZE_TELLS, splitSentences: splitSentences, sanitizeRewrite: sanitizeRewrite, normalizeForScan: normalizeForScan }; }
+var SapienizeEngine = { analyzeText: analyzeText, SAPIENIZE_TELLS: SAPIENIZE_TELLS, splitSentences: splitSentences, wordCount: wordCount, sanitizeRewrite: sanitizeRewrite, normalizeForScan: normalizeForScan };
+if (typeof module !== "undefined") { module.exports = SapienizeEngine; }

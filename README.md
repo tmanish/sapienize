@@ -1,61 +1,152 @@
 # Sapienize
 
-Find the machine accent in a draft. Restore your own voice.
+Sapienize is a local-first text analysis and voice-restoration toolkit. It separates stylistic observations, detector evidence, voice similarity, semantic integrity, and provenance instead of collapsing them into a claim about who wrote a document.
 
-**Open the app: https://tmanish.github.io/sapienize/** — runs entirely in your browser, nothing to install, no account.
+**Open the browser app:** https://tmanish.github.io/sapienize/
+
+The standalone app runs analysis in the browser. Text is sent to a model provider only when you request a rewrite. The browser rewrite path supports Anthropic, OpenAI, and OpenRouter with user-supplied credentials; Anthropic can also work without a key inside a compatible Claude artifact.
 
 ## Get it
 
-- **Use it in the browser**: https://tmanish.github.io/sapienize/. Analysis is fully client-side; your text never leaves the page.
-- **Download the app**: grab [sapienize.html](https://github.com/tmanish/sapienize/raw/main/sapienize.html) (right-click, Save Link As) and open it in any browser. Works offline for analysis.
-- **Get the Claude skill**: download [sapienize.skill](https://github.com/tmanish/sapienize/raw/main/sapienize.skill) and install it in Claude. Then ask: "sapienize this draft" or "make this sound like me."
+- Use the hosted browser app at https://tmanish.github.io/sapienize/.
+- Download [`sapienize.html`](https://github.com/tmanish/sapienize/raw/main/sapienize.html) for a standalone file that works offline for analysis.
+- Download [`sapienize.skill`](https://github.com/tmanish/sapienize/raw/main/sapienize.skill) to install the thin Claude host adapter, then ask to “sapienize this draft” or “make this sound like me.”
 
-## Why
+To use Anthropic's keyless artifact path, attach `sapienize.html` to a Claude.ai chat and ask Claude to render it as an artifact. On the hosted page or from a local file, use **API settings** and supply your own provider credential.
 
-AI detectors answer one narrow question: does this text statistically resemble model output? They know nothing about the work behind it. Not the idea you carried around for months, not the sleepless nights spent fixing what the model got wrong, not the hundred prompts it took to get your own thinking onto the page. In an age when using AI well is simply how work gets done, a writer who did all of that can still get flagged, and a score from a black box becomes the verdict on their effort. Sapienize is an attempt to push back on that flawed mechanic. If you did the work, the words should sound like you, and no classifier should get the last word on your authorship.
+## What the results mean
 
-## Using the app
+| Result | Question it answers | Current status | What it does not mean |
+|---|---|---|---|
+| Stylistic signals | Which configured phrases, structures, punctuation habits, and rhythm patterns occur? | Available locally | Proof that AI wrote the text |
+| Style heuristic | How densely does the text trigger the configured signal library? | Available as a backward-compatible, uncalibrated 0–100 score; higher means fewer configured signals | Probability of human authorship, detector confidence, or quality |
+| Local detector estimate | What would a calibrated local AI-text detector conclude? | Unavailable until a detector is trained and evaluated on suitable data | The style heuristic with a new label |
+| External detector observation | What did a particular external detector/version report on a particular date? | Adapter-ready; requires legitimate access and credentials | A score directly comparable with another detector's score, or a rewrite target |
+| Voice similarity | How closely do measured writing habits match an authentic `VoiceProfile`? | Available with aggregate and component-level differences | Identity verification or authorship probability |
+| Semantic integrity | What protected facts or claims changed between an original and a rewrite? | Available for numbers, URLs, dates, quotations, likely named entities, lexical similarity, and obvious claim changes | A guarantee that every subtle implication is unchanged |
+| Provenance | Is there explicit, supported evidence about tool participation? | Structured interface available; Anthropic watermark verification reports `unsupported` unless an official verifier is configured | Something that can be inferred from stock phrases or invisible characters |
+| Document integrity | Does the text contain invisible or directional formatting characters worth reviewing? | Available locally | Watermark or AI-authorship evidence |
 
-1. Paste a draft, click **Run forensics**. Analysis is fully client-side; nothing leaves the page. No key, no account, works for anyone.
-2. Optional voice source: pick a **persona** (preset or custom, e.g. "solicitor, 64, UK") and/or paste 100 to 300 words you wrote yourself. Personas shape style only and never invent facts; your own sample wins over the persona on conflicts.
-3. Click **Rewrite in my voice**.
-   - Inside a Claude.ai artifact: works with no key.
-   - Anywhere else (the hosted page, a local file): open **API settings**, pick a provider (Anthropic, OpenAI, or OpenRouter), set the model if you want, and paste your own key. Each user brings their own. Keys stay in memory for that tab only, never stored, sent only to the selected provider.
-4. **Use as new specimen** feeds the rewrite back in for another pass.
+These result families remain separate in the API and in evaluation. External detector and provenance results are observations only. Sapienize never uses them to rank rewrites.
 
-## Running it inside Claude (no key)
+## Browser workflow
 
-- Attach `sapienize.html` to a claude.ai chat and ask: "render this file as an artifact." It runs in the preview panel on the right with keyless rewrites.
-- Or paste the file's code into a chat with the same request.
-- To share: open the artifact in claude.ai and click Publish. Anyone signed in to claude.ai can then use the link with keyless rewrites billed to their own Claude plan.
+1. Paste a draft and select **Run forensics**. The scan is local and highlights configured signals with contextual findings.
+2. Optionally choose a requested persona and, preferably, provide at least **300 words of authentic writing**. Shorter samples are accepted with a warning because their measured habits are less stable. A genuine sample takes precedence over persona assumptions.
+3. Select **Rewrite in my voice** and configure Anthropic, OpenAI, or OpenRouter if needed. API keys remain in the page's memory for the current tab and are sent only to the selected provider.
+4. Review the rewrite's semantic differences, document-integrity findings, and voice comparison. Automated checks can miss subtle changes, so the author remains the final reviewer.
+5. Use **Use as new specimen** to rescan a candidate.
 
-## Using the skill
+The rewrite objective is ordered: preserve meaning and protected facts, match the supplied voice, then reduce generic or model-associated patterns where that does not conflict with the first two goals. Sapienize does not impose universal rules such as banning em dashes; punctuation is compared with the author's actual profile when one is available.
 
-Install `sapienize.skill` in Claude, then ask: "sapienize this draft" or "make this sound like me." Attach a voice sample for best results. The skill runs the same scan-rewrite-verify loop as the app, but on anything in the chat: pasted prose, files, READMEs, previously generated artifacts.
+## Core and CLI
 
-## For developers
+The provider-neutral core exposes these operations:
 
-This repo is the source; the two download files above are build outputs.
+```js
+sapienize.analyze(text, options)
+sapienize.createVoiceProfile(samples)
+sapienize.compareVoice(text, profile)
+sapienize.rewrite(text, options)
+sapienize.verify(original, rewrite, options)
+sapienize.checkProvenance(text, options)
+```
 
-- `src/`: the analysis engine (`engine.js`, the `SAPIENIZE_TELLS` pattern library) and the app shell.
-- `skill/`: the Claude skill source (`SKILL.md` plus the tell reference `tells.md`).
-- `tests/`: engine unit tests and jsdom end-to-end tests, `bash tests/run_all.sh` runs everything.
-- `build.py`: rebuilds `sapienize.html` and `sapienize.skill` from source. Edit the source, never the artifacts.
-- `index.html`: redirects the GitHub Pages root to the app.
+The command-line surface covers the main file-oriented workflows:
 
-## Keeping it current
+```bash
+sapienize scan draft.txt
+sapienize profile samples/
+sapienize rewrite draft.txt --voice profile.json
+sapienize verify original.txt rewrite.txt
+sapienize provenance draft.txt
+sapienize eval eval/fixtures/public-synthetic.jsonl
+```
 
-AI writing habits shift and detectors retrain, so the tell library needs a cadence. It is plain data: the `SAPIENIZE_TELLS` array in `src/engine.js` and `skill/sapienize/references/tells.md`. Every two weeks: generate a few fresh samples from current models, run them through the app, add unflagged patterns as new entries, retire entries the models stopped using, then `python3 build.py && bash tests/run_all.sh` before shipping. The GitHub Actions workflow in `.github/workflows/biweekly-refresh.yml` runs the regression suite on every push and opens a reminder issue on the 1st and 15th of each month.
+Run `sapienize --help` for the installed command's complete options. Scanning, profiling, verification, and the built-in integrity checks are local. Rewriting requires an explicitly selected provider. The proposed MCP mapping is documented in [`docs/mcp-interface.md`](docs/mcp-interface.md); an MCP server is not shipped in this release.
 
-## Contributing a tell
+From a repository checkout, use `npm run sapienize -- <command>` instead of a globally installed `sapienize` binary. Rewrite credentials are read from `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, or `OPENROUTER_API_KEY` by default; `--api-key-env` selects a different environment variable. Keys are not accepted as command arguments and are redacted from CLI output.
 
-Spotted AI phrasing that slips through the scan? A tell lives in two places, and both must change together:
+## Voice profiles
 
-1. Add a regex entry to the `SAPIENIZE_TELLS` array in `src/engine.js`: `{ re: /\byour pattern\b/gi, label: "short name", cat: "lexical" | "structure" | "rhythm", sev: 1-3, fix: "plain-speech replacement" }`. Severity: 3 = near-certain machine accent, always remove; 2 = strong signal; 1 = weak signal, fix on repetition.
-2. Add the matching row to `skill/sapienize/references/tells.md` in the corresponding section, so the skill flags it too.
+`createVoiceProfile(samples)` measures sentence and paragraph distributions, fragments and short sentences, lexical diversity, contractions, punctuation and parentheticals, questions, pronouns, function words, conjunctions, transitions, hedges, intensifiers, discourse markers, spelling convention, register, sentence openings, vocabulary, and rhythm.
 
-Then `python3 build.py && bash tests/run_all.sh`, and open a PR that includes a sample sentence the new tell catches. Same flow applies to retiring a tell current models no longer produce.
+`compareVoice(text, profile)` returns an uncalibrated descriptive similarity and component differences. It does not identify a person. Use authentic, representative samples from the relevant register; combining unrelated genres or AI-edited samples produces a misleading target. Sapienize recommends 300 or more words and reports a warning below that amount.
 
-## Honest limits
+## Evaluation
 
-Sapienize measures and removes stylistic AI fingerprints and restores the author's voice. AI detectors are black boxes that change without notice, so no tool can guarantee their output, this one included.
+Evaluation records use JSON or JSONL:
+
+```json
+{
+  "id": "public-human-001",
+  "text": "...",
+  "source_type": "human",
+  "model": "optional",
+  "domain": "email",
+  "author_id": "optional-pseudonym",
+  "metadata": {}
+}
+```
+
+Supported source types are `human`, `ai`, `human_ai_polished`, `ai_human_edited`, and `mixed`. Do not commit private author samples. The evaluator can report classification metrics when real predictions are supplied, calibration error only for explicitly calibrated probabilities, grouped performance, voice similarity, and semantic preservation. The included synthetic fixture tests plumbing; it is not evidence of detector accuracy.
+
+```bash
+npm run eval -- eval/fixtures/public-synthetic.jsonl
+```
+
+No accuracy, calibration, or cross-detector equivalence is claimed without representative evaluation data.
+
+## Detector and provenance integrations
+
+`src/detectors/adapter.js` defines the external observation contract; no paid vendor integration or credential is bundled. The mock adapter supports deterministic tests. Surrogate hooks prepare feature rows for later research but ship no trained model, prediction claim, or calibration.
+
+Every external observation retains its detector name, version when known, date, raw response, provider-specific normalized representation, explicit calibration status, and limitations. These observations may be evaluated, but never optimized during rewriting.
+
+Provenance is a separate subsystem. The Anthropic watermark boundary accepts only an official configured verifier; without one it returns `unsupported`. Sapienize does not try to infer SynthID-Text from regexes, phrasing, or hidden characters. Document-integrity checks surface invisible/directional characters independently and do not remove them to alter provenance.
+
+## Repository layout
+
+- `src/analysis/`: stylistic signals, the legacy style heuristic, and the explicit unavailable local-detector result.
+- `src/detectors/`: external detector observation adapters, deterministic mocks, and unvalidated surrogate-research hooks.
+- `src/voice/`: `VoiceProfile` extraction, validation, and comparison.
+- `src/rewrite/`: provider-neutral prompts, semantic verification, rewrite verification, and candidate ranking.
+- `src/providers/`: Anthropic, OpenAI, and OpenRouter adapters behind one provider interface.
+- `src/provenance/`: document-integrity checks and provenance/watermark adapter boundaries.
+- `src/core/`: structured provider-neutral API and result validation.
+- `src/engine.js`: backward-compatible v1 analysis facade and tell library.
+- `eval/`: dataset parsing, metrics, evaluator, and public synthetic fixtures.
+- `skill/sapienize/`: Claude skill source, implemented as a thin host workflow over the shared concepts.
+- `src/sapienize_shell.html`: authoritative browser UI source.
+- `sapienize.html` and `sapienize.skill`: generated release artifacts. Do not edit them directly.
+- `build.py`: browser/skill artifact builder.
+- `tests/`: unit, integration, browser, provider, and artifact regressions.
+
+See [`AGENTS.md`](AGENTS.md) for architectural invariants and contribution commands.
+
+## Development
+
+```bash
+npm install
+npm run build
+npm test
+npm run eval -- eval/fixtures/public-synthetic.jsonl
+```
+
+`npm test` first checks that generated artifacts match their sources, then verifies that rebuilding is byte-for-byte reproducible. After changing `src/` or `skill/`, run `npm run build` before the suite; never patch the generated HTML or skill archive directly.
+
+The executable tell library currently has two maintained representations: entries in `src/engine.js` and their host-readable counterparts in `skill/sapienize/references/tells.md`. Keep executable labels, severities, and guidance aligned until they are generated from one shared data file; reference-only advice must be explicitly marked `Manual/context-only`.
+
+## Limitations and safety
+
+- Stylistic patterns have false positives, vary by domain, and change over time. A genuine author may use any configured pattern.
+- The legacy style heuristic is manually weighted and uncalibrated. It must never be presented as a probability or detector result.
+- Voice similarity is sensitive to sample length, genre, language variety, and topic. It is descriptive, not biometric.
+- Semantic verification is conservative but heuristic. Review flagged differences and reread important rewrites yourself.
+- Named-entity extraction is approximate, especially across languages and specialist domains.
+- An unavailable provenance verifier means provenance is unknown, not absent. Invisible characters are reported separately and are not treated as watermark evidence.
+- External detectors require their own credentials and terms-compliant use. Record detector name, version when known, observation date, raw response, and any normalized view.
+- Sapienize does not optimize text against named detectors, remove watermarks, or promise that a rewrite will receive a particular detector result.
+- The project does not claim detector accuracy until reproducible evaluation on representative, legally usable data supports it.
+
+Sapienize is a review aid, not an authorship adjudicator.

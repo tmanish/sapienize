@@ -15,14 +15,11 @@ d.getElementById("rewriteBtn").dispatchEvent(new w.Event("click"));
 setTimeout(() => {
   let prompt = JSON.parse(captured.body).messages[0].content;
   assert(/Solicitor, 64, UK/.test(prompt), "preset persona spec lands in prompt");
-  assert(/Do not invent biographical details/.test(prompt), "no-fabrication guard present");
-  // regression: rules against introducing new tells must always be present
-  assert(/zero em dashes/.test(prompt), "zero-em-dash rule always present");
-  assert(/never expand one into its formal form|Use contractions wherever/.test(prompt), "contraction rule always present");
-  assert(/Keep sentence lengths as varied|Vary sentence length hard/.test(prompt), "rhythm rule always present");
-  const noAdd = prompt.split("\n").find(l => l.indexOf("- Do not introduce any of these patterns") === 0) || "";
-  assert(noAdd.indexOf("secret sauce") !== -1, "do-not-introduce list covers the rest of the tell library");
-  assert(noAdd.indexOf("delve") === -1 && /Remove these flagged patterns[^\n]*delve/.test(prompt), "flagged tells stay in the remove list, not the do-not-introduce list");
+  assert(/must never create biography or facts/.test(prompt), "no-fabrication guard present");
+  assert(/Preserve meaning, facts, claims, numbers, names, dates, URLs, and quotations/.test(prompt), "semantic fidelity is the first rewrite priority");
+  assert(/Review these configured stylistic findings in context:[^\n]*delve/.test(prompt), "configured findings land in the shared prompt as contextual signals");
+  assert(/Do not optimize for an AI detector/.test(prompt), "detector scores are excluded from rewrite objectives");
+  assert(!/zero em dash/i.test(prompt), "prompt has no universal zero-em-dash rule");
   // custom persona path
   d.getElementById("persona").value = "custom";
   d.getElementById("persona").dispatchEvent(new w.Event("change"));
@@ -37,13 +34,13 @@ setTimeout(() => {
     d.getElementById("rewriteBtn").dispatchEvent(new w.Event("click"));
     setTimeout(() => {
       prompt = JSON.parse(captured.body).messages[0].content;
-      assert(/the sample wins/.test(prompt), "sample-wins rule included when both set");
+      assert(/VoiceProfile wins on conflict/.test(prompt) && /<voice_profile>/.test(prompt), "measured VoiceProfile wins when both sources are set");
       // no persona, no sample: neither block present
       d.getElementById("persona").value = ""; d.getElementById("personaCustom").value = ""; d.getElementById("voice").value = "";
       d.getElementById("rewriteBtn").dispatchEvent(new w.Event("click"));
       setTimeout(() => {
         prompt = JSON.parse(captured.body).messages[0].content;
-        assert(!/<persona>/.test(prompt) && !/<voice_sample>/.test(prompt), "clean prompt when neither is set");
+        assert(!/<persona>/.test(prompt) && !/<voice_profile>/.test(prompt), "clean prompt when neither is set");
         process.exit(fail ? 1 : 0);
       }, 30);
     }, 30);

@@ -1,73 +1,105 @@
 ---
 name: sapienize
-description: De-AI-ify a draft. Detect and remove AI-writing tells (stock phrases like "delve" and "tapestry", em dash overuse, flat sentence rhythm, missing contractions, formulaic transitions and structure) and rewrite the text in the author's own voice while preserving every fact. Use this skill whenever the user asks to humanize, de-AI, naturalize, or "make this sound like me," says a draft "sounds like ChatGPT" or "reads AI-generated," mentions an AI detector flagging their writing, or asks for a voice pass on any article, essay, post, email, or README, even if they don't use the word "sapienize."
+description: Analyze explainable stylistic signals, compare prose with an authentic writing sample, and restore the author's voice while preserving meaning. Use when a user asks to sapienize, humanize, naturalize, de-AI, or make prose sound like them; asks why text sounds generic or model-associated; says an AI detector flagged it; or wants a semantic-first voice pass on pasted text or a document. Report the legacy style heuristic only as uncalibrated and non-probabilistic. Never promise a detector outcome.
 ---
 
-# Sapienize
+# Sapienize host adapter
 
-Restore a human author's voice to a draft. The workflow is a generate-verify-refine loop: scan, report, rewrite, re-scan, converge.
+Use Sapienize's shared concepts and, when available in the host environment, its provider-neutral core or CLI. This skill is a thin Claude-host workflow, not a second detector or an independent scoring implementation.
 
-Scope note: this skill improves the authenticity of prose. Don't claim the output will pass any named AI detector, and where the user's context explicitly requires sole-authorship declarations with no AI use, say so once and proceed with what's legitimate: a genuine voice pass with disclosed assistance.
+The goal is voice restoration in this order: preserve meaning and protected facts, match an authentic voice, then reduce generic/model-associated patterns where those edits do not conflict with the first two priorities.
 
-## Step 1: Intake
+Do not optimize for a named detector, treat the style heuristic as authorship probability, infer a watermark from wording or invisible characters, remove provenance signals, or claim that a rewrite will receive a particular detector result.
 
-Collect the draft plus one optional voice source:
+## 1. Establish the request
 
-1. **The draft.** Required. This can be pasted prose OR a file/artifact: a README, an HTML page, a Word document, a blog post file, code with prose comments and docstrings. If the user points at a file or a previously generated artifact, operate on that file directly.
-2. **A voice source.** Optional but high leverage. Two kinds, and a writing sample beats a persona wherever they conflict:
-   - **Writing sample**: ask once: "Got 100 to 300 words you wrote yourself with no AI? An old post, a long email, a Slack rant. I'll match its rhythm and vocabulary."
-   - **Persona**: the user names an author profile, e.g. "project manager, 52, California" or "solicitor, 64, UK." Derive a register spec from it: sentence habits, vocabulary range, hedging style, spelling convention (UK/US/Indian professional English). A persona shapes register, rhythm, and word choice ONLY. Never invent biographical details, credentials, anecdotes, or opinions that are not in the draft.
+Collect:
 
-If neither is given, proceed with a neutral-conversational register and say that's what you're doing.
+1. **Original text.** Required. It may be pasted prose or a file/artifact.
+2. **Authentic voice sample.** Optional but preferred. Recommend at least 300 words written by the user without AI rewriting. Accept less when that is all they have, but warn that measured habits may be unstable.
+3. **Persona.** Optional and only when requested. It may guide register, diction, and spelling convention. It must not supply biography, credentials, anecdotes, facts, or opinions. An authentic `VoiceProfile` wins on conflict.
+4. **Scope constraints.** Record protected quotations, formatting, terminology, word-count requirements, and passages that must remain unchanged.
 
-## Step 2: Scan
+If the user requests analysis only, stop after reporting it. If no voice source is supplied, perform a conservative clarity pass rather than pretending to know the user's personal voice.
 
-Read `references/tells.md` and check the draft against all four categories:
+## 2. Use the shared analysis model
 
-1. **Lexical tells**: the stock vocabulary list (delve, tapestry, leverage, seamless, pivotal, and the rest).
-2. **Structural tells**: "not only X but also Y," "it's not just X, it's Y," "whether you're X or Y," rule-of-three overload, "In conclusion," uniform paragraph blocks, bolded-label list formatting where prose was requested.
-3. **Rhythm tells**: flat sentence-length variance, Moreover/Furthermore/Additionally openers, three or more consecutive sentences of near-identical length, repeated sentence openers.
-4. **Voice tells**: near-zero contractions, em dash rate above roughly 4 per 1,000 words, hedged abstractions where a specific would do, zero first-person presence in a piece that claims personal experience.
+Prefer the shared core/CLI when it is available:
 
-Tally findings with counts. Compute the rough rhythm numbers by hand: average sentence length, and whether lengths visibly vary.
+```bash
+sapienize scan draft.txt
+sapienize profile samples/
+sapienize verify original.txt rewrite.txt
+```
 
-## Step 3: Report
+If it is unavailable, use `references/tells.md` as contextual review guidance and preserve the same result boundaries. Never invent unavailable metrics.
 
-Before rewriting, show the user a compact findings table: tell, category, count, suggested fix. This is the deliverable half the time; some users only want the diagnosis. Ask nothing here; proceed to the rewrite unless the user asked for analysis only.
+Report each applicable concept separately:
 
-## Step 4: Rewrite
+- **Stylistic signals:** configured phrases, structures, punctuation habits, and rhythm observations. They are explainability findings, not proof of model generation.
+- **Style heuristic:** the backward-compatible 0–100 number, if the shared engine produced one. Call it an uncalibrated style heuristic; higher means fewer configured signals. Do not call it a human score, probability, detector estimate, or confidence.
+- **Local detector estimate:** report `unavailable` unless an evaluated detector actually supplied it.
+- **External detector observations:** include only results the user legitimately supplied or explicitly requested through a configured adapter. Preserve detector name, version when known, date, raw result, and normalized interpretation. Do not compare vendor percentages as if they share a scale.
+- **Voice similarity:** use only with a `VoiceProfile`; describe aggregate and component differences, never identity or authorship probability.
+- **Semantic integrity:** requires an original and candidate. It is not applicable to a one-text scan.
+- **Provenance:** use only explicit supported verifier evidence. `unsupported` means unknown, not absent.
+- **Document integrity:** report invisible/directional formatting separately. It is not watermark evidence.
 
-Rules, in priority order:
+For a compact analysis deliverable, show the most material stylistic findings with category, count, excerpt, and contextual revision option. Note authentic/domain-appropriate usages that should remain.
 
-1. Preserve every fact, claim, number, name, and link. Add no new claims. Keep length within 15% of the original unless asked otherwise.
-2. Remove every flagged tell. Replace with the fixes in `references/tells.md` or with plain speech.
-3. Vary rhythm deliberately: mix long sentences with short ones. Include at least one sentence under five words per few paragraphs. Break one "perfect" paragraph.
-4. Contract wherever the author would contract out loud, unless the voice sample is formal.
-5. Match the voice sample: sentence length habits, favorite connectors, punctuation habits, register, and any recurring idiom. Borrow its habits, not its sentences.
-6. Prefer concrete specifics over abstract intensifiers: replace "significantly improved" with the number, "a wide range of" with three named items.
-7. Use zero em dashes: convert each one to a comma, a period, or parentheses. American English unless the draft, sample, or persona says otherwise.
-8. **Files and artifacts**: when the draft is a file, edit the prose in place and return the updated file, not a chat transcript of it. Rewrite only human-readable prose: paragraphs, headings, README body, docstrings and comments if asked. Never alter code logic, markup structure, tags, attributes, links, front matter keys, or data. For HTML, rewrite visible copy inside elements and leave everything else byte-identical where possible.
-9. **Persona register**: apply the derived spec consistently across the whole piece: spelling convention, hedging style, sentence habits. Style only; zero fabricated facts.
+## 3. Create and interpret the VoiceProfile
 
-## Step 5: Verify and converge
+When an authentic sample is available, use `createVoiceProfile(samples)` or `sapienize profile`. Let the measured profile guide sentence lengths, fragments, paragraph shape, lexical diversity, contractions, punctuation, parentheticals, questions, pronouns, function words, conjunctions, transitions, hedging, intensifiers, discourse markers, spelling, register, openings, vocabulary, and cadence.
 
-Re-run the Step 2 scan on the rewrite. Convergence criteria:
+The profile is descriptive. Do not force generic rules such as zero em dashes, mandatory contractions, a short sentence quota, American spelling, or a target burstiness. If the author's sample frequently uses em dashes, semicolons, formal expansions, long sentences, or fragments, those may be valid voice features.
 
-- Zero severity-3 lexical tells remain.
-- No Moreover/Furthermore/Additionally sentence openers.
-- Sentence lengths visibly vary (at least one sentence of 6 words or fewer, at least one over 25, in any piece longer than 150 words).
-- Zero em dashes remain.
+Do not borrow sentences, private facts, or distinctive content from the sample. Borrow measured habits only.
 
-If any criterion fails, refine and re-scan. Maximum 3 passes. If the same criterion fails twice, replan: rewrite that section from scratch instead of patching it. Report the pass count honestly.
+## 4. Rewrite through the shared workflow
 
-As a final sweep, reread once asking: which single sentence still sounds most machine-made? Fix that one even if no checklist row names it.
+When the provider-neutral rewrite operation is available, call it with the original, `VoiceProfile`, stylistic findings, semantic constraints, and requested persona. Otherwise apply the same prompt priorities in the current Claude host.
 
-## Step 6: Deliver
+Rules:
 
-Output three things:
+1. Preserve every fact, claim, number, date, name, URL, and quotation. Add no claim, example, credential, anecdote, opinion, or first-person experience.
+2. Preserve the intended strength, uncertainty, negation, conditions, and scope of each claim.
+3. Match the authentic profile where the evidence is reliable. Prefer sample-derived habits over persona assumptions.
+4. Review configured stylistic signals in context. Revise only when the change improves the requested voice without damaging meaning.
+5. Keep quotations exact unless the user explicitly authorizes editing them.
+6. Honor required length and formatting, but never trade factual fidelity for a score.
+7. Do not use external detector or provenance observations in the prompt, objective, pass/fail criteria, or candidate ranking.
 
-1. The restored draft.
-2. A short change log: what was removed, grouped by category, with counts.
-3. One line of residuals: anything intentionally kept (for example, a technical term that looks like a tell but is domain-correct) and why.
+For files and artifacts, edit human-readable prose in place. Preserve code logic, markup structure, tags, attributes, links, front matter keys, and data unless the user explicitly expands scope.
 
-Close with an invitation for one round of author edits. The author's ear is the real acceptance test; the loop raises the floor, it doesn't certify the ceiling.
+## 5. Verify before delivery
+
+Run the shared verification operation when available:
+
+```bash
+sapienize verify original.txt rewrite.txt
+```
+
+Check at minimum:
+
+- numbers, dates, URLs, names, and quotations;
+- obvious added or removed claims;
+- changes to negation, qualification, certainty, or modality;
+- major lexical/semantic divergence;
+- voice similarity when a profile exists;
+- stylistic findings as a tertiary review layer.
+
+Treat protected-content changes as blockers. Fix them or surface them clearly; do not silently accept them. Rank eligible candidates lexicographically: semantic status and integrity first, then voice similarity, then fewer unwanted configured signals. Detector and provenance scores are never ranking inputs.
+
+Automated checks can miss subtle changes. Reread the original and rewrite side by side, especially for legal, medical, financial, scientific, or policy-sensitive prose.
+
+## 6. Deliver
+
+Return:
+
+1. the restored draft or updated file;
+2. a concise summary of meaningful voice/style changes;
+3. semantic-integrity warnings or protected differences requiring review;
+4. the voice-sample warning when fewer than 300 authentic words were used;
+5. residual stylistic findings intentionally kept because they match the author, domain, quotation, or meaning.
+
+Use careful language: the result may better match the supplied voice and trigger fewer configured signals, but it is not certified human-authored and has no promised detector outcome. The author's own review is the acceptance test.

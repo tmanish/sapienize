@@ -1,11 +1,19 @@
 {
   "name": "sapienize",
-  "version": "1.2.0",
+  "version": "2.0.0",
   "private": true,
   "license": "GPL-3.0",
+  "bin": {
+    "sapienize": "src/cli/sapienize.js"
+  },
   "scripts": {
     "build": "python3 build.py",
-    "test": "bash tests/run_all.sh"
+    "test": "bash tests/run_all.sh",
+    "eval": "node src/cli/sapienize.js eval",
+    "sapienize": "node src/cli/sapienize.js"
+  },
+  "engines": {
+    "node": ">=20.19.0"
   },
   "devDependencies": {
     "jsdom": "^29.1.1"

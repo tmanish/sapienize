@@ -94,6 +94,10 @@
   .delta { font-family: var(--mono); font-size: 13px; }
   .delta .up { color: var(--good); }
   .rewritten { white-space: pre-wrap; font-size: 15px; line-height: 1.7; background: var(--bg); border: 1px solid var(--line); border-radius: 8px; padding: 16px; max-height: 420px; overflow: auto; }
+  .review-details { margin-top: 10px; padding: 10px 12px; background: var(--surface-2); border: 1px solid var(--line); border-radius: 8px; }
+  .review-details .review-title { font-size: 13px; font-weight: 700; margin: 7px 0 2px; }
+  .review-details .review-title:first-child { margin-top: 0; }
+  .review-details .review-line { color: var(--muted); font-size: 12px; line-height: 1.45; margin: 2px 0; }
 
   .empty { color: var(--muted); font-size: 14px; padding: 26px 8px; text-align: center; }
   .stack > .panel { margin-bottom: 24px; }
@@ -109,11 +113,11 @@
   <header>
     <div class="brand">
       <div class="wordmark">SAPIEN<span class="flip">IZE</span></div>
-      <div class="eyebrow">Text forensics · v1.2</div>
+      <div class="eyebrow">Text provenance &amp; voice · v2.0</div>
     </div>
     <div style="text-align:right;">
-      <div class="tagline">Find the machine accent in your draft. Restore your own voice.</div>
-      <div class="eyebrow" style="margin-top:4px;">Updated: July 2026</div>
+      <div class="tagline">Explain configured style signals. Restore your own voice.</div>
+      <div class="eyebrow" style="margin-top:4px;">Updated: August 2026</div>
     </div>
   </header>
 
@@ -145,10 +149,10 @@
           <option value="custom">Custom persona...</option>
         </select>
         <input type="text" id="personaCustom" class="hidden" spellcheck="false" placeholder="Describe the author: role, age, region, register. Example: retired teacher, 60, Texas, warm and plain-spoken." style="width:100%; margin-top:8px; background:var(--bg); color:var(--ink); border:1px solid var(--line); border-radius:8px; padding:10px 12px; font-family:var(--sans); font-size:14px;">
-        <div class="voice-label">Optional: paste 100 to 300 words you wrote yourself, no AI. The rewrite will match its rhythm and vocabulary. If you set both, your sample wins over the persona wherever they conflict.</div>
+        <div class="voice-label">Optional: paste preferably 300+ words of authentic writing. The rewrite will match measured habits in that sample. If you set both, your sample wins over the persona wherever they conflict.</div>
         <textarea id="voice" class="small" spellcheck="false" placeholder="A Slack rant, an old blog paragraph, an email. Anything that sounds like you."></textarea>
         <div class="bar">
-          <span class="count">Rewrites use Claude and keep your facts intact. Works per pass on drafts up to roughly 600 words; run longer pieces in sections.</span>
+          <span class="count">Rewrites use your selected provider, then check facts, voice similarity, and style signals. Run long pieces in sections.</span>
           <span>
             <button class="ghost" id="settingsBtn" type="button">API settings</button>
             <button class="primary" id="rewriteBtn" type="button" disabled>Rewrite in my voice</button>
@@ -175,14 +179,15 @@
             <button class="ghost" id="iterateBtn" type="button">Use as new specimen</button>
           </div>
           <div class="rewritten" id="rwText"></div>
+          <div class="review-details" id="rwReview"></div>
         </div>
       </section>
     </div>
 
     <div class="stack">
       <section class="panel">
-        <h2>Sapien score</h2>
-        <div id="scoreArea"><div class="empty">Run forensics to get a verdict.</div></div>
+        <h2>Style heuristic</h2>
+        <div id="scoreArea"><div class="empty">Run forensics to get a style result.</div></div>
       </section>
 
       <section class="panel">
@@ -191,21 +196,26 @@
       </section>
 
       <section class="panel">
+        <h2>Document integrity</h2>
+        <div id="integrityArea"><div class="empty">Invisible and directional formatting checks appear here, separately from style and provenance.</div></div>
+      </section>
+
+      <section class="panel">
         <h2>Specimen view</h2>
         <div id="specArea"><div class="empty">Your text, with every tell inked and explained on hover.</div></div>
         <div class="legend">
-          <span><span class="dot" style="background:var(--sev3)"></span>strong tell</span>
-          <span><span class="dot" style="background:var(--sev2)"></span>moderate tell</span>
-          <span><span class="dot" style="background:var(--sev1)"></span>weak signal</span>
+          <span><span class="dot" style="background:var(--sev3)"></span>high-priority signal</span>
+          <span><span class="dot" style="background:var(--sev2)"></span>review signal</span>
+          <span><span class="dot" style="background:var(--sev1)"></span>context signal</span>
         </div>
       </section>
     </div>
   </div>
 
   <footer>
-    SAPIENIZE measures stylistic fingerprints; it is not a detector oracle and makes no guarantee about any third-party classifier.
-    The durable fix is the same either way: prose that carries your rhythm, your specifics, and your judgment.
-    All analysis runs client-side. The rewrite step sends your text to your selected provider only when you click the button. Tell library: 133 patterns, updated July 2026.
+    The style heuristic explains configured writing patterns; it is uncalibrated and is not a probability of human authorship.
+    Voice similarity, detector observations, semantic integrity, and provenance are separate results.
+    Analysis runs client-side. Rewriting sends text to your selected provider only when you click the button. Invisible characters are document-integrity findings, not watermark evidence.
   </footer>
   <div class="eyebrow" style="margin-top:12px;"><a href="https://github.com/tmanish/sapienize" style="color:var(--muted); text-decoration:none;">github.com/tmanish/sapienize</a></div>
 </div>
@@ -219,7 +229,10 @@
 (function () {
   var $ = function (id) { return document.getElementById(id); };
   var lastAnalysis = null;
+  var lastResult = null;
   var lastText = "";
+  var analysisGeneration = 0;
+  var rewriteRequestGeneration = 0;
 
   var SAMPLE = "In today's fast-paced digital landscape, building a personal brand stands as a testament to professional growth. It is important to note that consistency is not just a habit; it is a paradigm shift. Whether you're a designer or a developer, leveraging cutting-edge tools can unlock the potential of your content strategy. Moreover, publishing regularly can streamline your workflow, foster engagement, and elevate your reach. Furthermore, it is crucial to delve into analytics to navigate the complexities of each platform. In conclusion, the transformative power of showing up daily cannot be overstated.";
 
@@ -228,11 +241,32 @@
   }
 
   function updateCount() {
-    var n = ($("input").value.match(/[A-Za-z0-9'\u2019-]+/g) || []).length;
+    var n = SapienizeEngine.wordCount($("input").value);
     $("incount").textContent = n + " words";
   }
-  $("input").addEventListener("input", updateCount);
-  $("loadSample").addEventListener("click", function () { $("input").value = SAMPLE; updateCount(); });
+  function invalidateAnalysisForChangedInput() {
+    var hadAnalysis = Boolean(lastAnalysis);
+    analysisGeneration += 1;
+    rewriteRequestGeneration += 1;
+    lastAnalysis = null;
+    lastResult = null;
+    lastText = "";
+    $("rewriteBtn").disabled = true;
+    $("rwResult").classList.add("hidden");
+    if (hadAnalysis) {
+      $("rwStatus").textContent = "Specimen changed. Run forensics again before rewriting.";
+      $("rwStatus").className = "status";
+    }
+  }
+  $("input").addEventListener("input", function () {
+    updateCount();
+    invalidateAnalysisForChangedInput();
+  });
+  $("loadSample").addEventListener("click", function () {
+    $("input").value = SAMPLE;
+    updateCount();
+    invalidateAnalysisForChangedInput();
+  });
 
   function scoreColor(score) {
     if (score >= 82) return "var(--good)";
@@ -243,24 +277,25 @@
   function dialSVG(score, size) {
     var r = 54, c = 2 * Math.PI * r, frac = Math.max(0, Math.min(1, score / 100));
     var col = scoreColor(score);
-    return '<svg class="dial" viewBox="0 0 132 132" width="' + size + '" height="' + size + '" role="img" aria-label="Sapien score ' + score + ' out of 100">' +
+    return '<svg class="dial" viewBox="0 0 132 132" width="' + size + '" height="' + size + '" role="img" aria-label="Uncalibrated style heuristic ' + score + ' out of 100">' +
       '<circle cx="66" cy="66" r="' + r + '" fill="none" stroke="var(--line)" stroke-width="9"/>' +
       '<circle cx="66" cy="66" r="' + r + '" fill="none" stroke="' + col + '" stroke-width="9" stroke-linecap="round" stroke-dasharray="' + (c * frac).toFixed(1) + ' ' + c.toFixed(1) + '" transform="rotate(-90 66 66)"/>' +
       '<text x="66" y="63" text-anchor="middle" font-size="30" fill="var(--ink)">' + score + '</text>' +
-      '<text x="66" y="84" text-anchor="middle" font-size="10" fill="var(--muted)" letter-spacing="2">SAPIEN</text></svg>';
+      '<text x="66" y="84" text-anchor="middle" font-size="10" fill="var(--muted)" letter-spacing="2">STYLE</text></svg>';
   }
 
   function fmtRatio(v) { return v === null ? "n/a" : Math.round(v * 100) + "%"; }
 
-  function renderScore(a) {
-    var html = '<div class="scorecard">' + dialSVG(a.score, 132) +
-      '<div><div class="band" style="color:' + scoreColor(a.score) + '">' + a.band + '</div>' +
-      '<div class="bandnote">' + a.bandNote + '</div></div></div>' +
+  function renderScore(a, heuristic) {
+    var score = heuristic.value;
+    var html = '<div class="scorecard">' + dialSVG(score, 132) +
+      '<div><div class="band" style="color:' + scoreColor(score) + '">' + escapeHtml(heuristic.band) + '</div>' +
+      '<div class="bandnote">' + escapeHtml(heuristic.note) + '</div></div></div>' +
       '<div class="metrics">' +
       metric("Words", a.words, "") +
-      metric("Burstiness", a.burstiness.toFixed(2), "sentence-length variance; humans usually land 0.45+") +
+      metric("Burstiness", a.burstiness.toFixed(2), "sentence-length variation measured within this document") +
       metric("Contractions", fmtRatio(a.contractionRatio), "share of contractable spots you actually contract") +
-      metric("Em dashes", a.emDashes + " (" + a.emDashRate.toFixed(1) + "/1k)", "over 4 per 1,000 words reads machine") +
+      metric("Em dashes", a.emDashes + " (" + a.emDashRate.toFixed(1) + "/1k)", "compare punctuation habits with an authentic VoiceProfile") +
       metric("Inline tells", a.inline.length, "flagged words and phrases") +
       '</div>';
     $("scoreArea").innerHTML = html;
@@ -269,10 +304,15 @@
     return '<div class="metric"><div class="k">' + k + '</div><div class="v">' + v + '</div>' + (hint ? '<div class="hint">' + hint + '</div>' : "") + '</div>';
   }
 
-  function renderFindings(a) {
+  function severityLabel(severity) {
+    return String(severity) === "3" ? "high-priority" : (String(severity) === "2" ? "review" : "context");
+  }
+
+  function renderFindings(signals) {
+    var a = signals.legacy;
     var rows = [];
-    a.global.forEach(function (g) {
-      rows.push('<div class="finding"><span class="chip s' + g.sev + '">' + (g.sev === 3 ? "strong" : g.sev === 2 ? "moderate" : "weak") + '</span>' +
+    signals.findings.document.forEach(function (g) {
+      rows.push('<div class="finding"><span class="chip s' + g.sev + '">' + severityLabel(g.sev) + '</span>' +
         '<div><div class="t">' + escapeHtml(g.label) + '</div><div class="d">' + escapeHtml(g.detail) + '</div></div></div>');
     });
     var tally = {};
@@ -282,11 +322,26 @@
     });
     Object.keys(tally).sort(function (x, y) { return Number(y.split("|")[1]) - Number(x.split("|")[1]); }).forEach(function (key) {
       var p = key.split("|");
-      rows.push('<div class="finding"><span class="chip s' + p[1] + '">' + (p[1] === "3" ? "strong" : p[1] === "2" ? "moderate" : "weak") + '</span>' +
+      rows.push('<div class="finding"><span class="chip s' + p[1] + '">' + severityLabel(p[1]) + '</span>' +
         '<div><div class="t">' + escapeHtml(p[0]) + '</div><div class="d">try: ' + escapeHtml(p[2]) + '</div></div>' +
         '<span class="tally">\u00D7' + tally[key] + '</span></div>');
     });
-    $("findingsArea").innerHTML = rows.length ? rows.join("") : '<div class="empty">Clean. No document-level flags, no phrase tells.</div>';
+    $("findingsArea").innerHTML = rows.length ? rows.join("") : '<div class="empty">No configured style findings in this specimen.</div>';
+  }
+
+  function renderIntegrity(report) {
+    var integrity = report && report.documentIntegrity;
+    if (!integrity || integrity.status === "invalid") {
+      $("integrityArea").innerHTML = '<div class="empty">Document-integrity status is unavailable.</div>';
+      return;
+    }
+    if (!integrity.findings.length) {
+      $("integrityArea").innerHTML = '<div class="empty">No configured invisible or directional formatting characters found.</div>';
+      return;
+    }
+    $("integrityArea").innerHTML = integrity.findings.map(function (finding) {
+      return '<div class="finding"><span class="chip s2">integrity</span><div><div class="t">' + escapeHtml(finding.codePoint + " " + finding.name) + '</div><div class="d">' + escapeHtml(finding.message + " This is not watermark evidence and does not affect the style score.") + '</div></div></div>';
+    }).join("");
   }
 
   function renderSpecimen(text, a) {
@@ -307,13 +362,33 @@
   }
 
   $("analyzeBtn").addEventListener("click", function () {
-    var text = $("input").value.trim();
-    if (!text) { $("scoreArea").innerHTML = '<div class="empty">Paste something first.</div>'; return; }
-    lastAnalysis = analyzeText(text);
-    lastText = lastAnalysis.text; // normalized: curly quotes unified, evasion characters stripped
-    renderScore(lastAnalysis);
-    renderFindings(lastAnalysis);
-    renderSpecimen(lastText, lastAnalysis);
+    var text = $("input").value;
+    analysisGeneration += 1;
+    rewriteRequestGeneration += 1;
+    lastAnalysis = null;
+    lastResult = null;
+    lastText = "";
+    $("rewriteBtn").disabled = true;
+    $("rwResult").classList.add("hidden");
+    $("rwStatus").textContent = "";
+    $("rwStatus").className = "status";
+    if (!text.trim() && text.indexOf("\uFEFF") === -1) {
+      $("scoreArea").innerHTML = '<div class="empty">Paste something first.</div>';
+      $("findingsArea").innerHTML = '<div class="empty">Run forensics to inspect configured style signals.</div>';
+      $("integrityArea").innerHTML = '<div class="empty">Run forensics to inspect document integrity.</div>';
+      $("specArea").innerHTML = '<div class="empty">Nothing analyzed yet.</div>';
+      return;
+    }
+    lastResult = SapienizeCore.analyze(text);
+    lastAnalysis = lastResult.stylisticSignals.legacy;
+    // Preserve the exact submitted text for rewriting. The normalized text is
+    // used only for legacy finding offsets and must not become an implicit
+    // document-integrity or provenance removal step.
+    lastText = text;
+    renderScore(lastAnalysis, lastResult.stylisticSignals.heuristicStyleScore);
+    renderFindings(lastResult.stylisticSignals);
+    renderIntegrity(lastResult.provenance);
+    renderSpecimen(lastAnalysis.text, lastAnalysis);
     $("rewriteBtn").disabled = false;
     $("rwStatus").textContent = "";
     $("rwStatus").className = "status";
@@ -339,53 +414,12 @@
     $("personaCustom").classList.toggle("hidden", $("persona").value !== "custom");
   });
 
-  // Measure the author's sample and hand the model numbers, not adjectives.
-  function voiceMetrics(voice) {
-    if (!voice) return "";
-    var vm = analyzeText(voice);
-    if (vm.sentences < 3) return "";
-    var parts = ["average sentence length about " + Math.round(vm.meanLen) + " words", "burstiness " + vm.burstiness.toFixed(2)];
-    if (vm.contractionRatio !== null) parts.push("contraction rate " + Math.round(vm.contractionRatio * 100) + "%");
-    return "- Match the author's measured habits: " + parts.join(", ") + ".";
-  }
-
-  function buildPrompt(text, a, voice) {
-    var flagged = {};
-    a.inline.forEach(function (f) { flagged[f.label] = true; });
-    // the rest of the tell library: patterns the draft doesn't have and the rewrite must not add
-    var doNotAdd = [];
-    SAPIENIZE_TELLS.forEach(function (t) { if (!flagged[t.label] && doNotAdd.indexOf(t.label) === -1) doNotAdd.push(t.label); });
-    var persona = personaSpec();
-    var lines = [
-      "You are a line editor restoring a human author's voice to a draft. Rewrite the draft below.",
-      "Hard rules:",
-      "- Preserve every fact, claim, number, and name. Add nothing new. Keep length within 15% of the original.",
-      "- Remove these flagged patterns entirely: " + (Object.keys(flagged).join("; ") || "none flagged; still avoid stock AI phrasing") + ".",
-      "- Do not introduce any of these patterns either: " + doNotAdd.join("; ") + ".",
-      "- Use zero em dashes (—). Every pause becomes a comma, a period, or parentheses.",
-      (a.contractionRatio !== null && a.contractionRatio < 0.45 ? "- Use contractions wherever a person would use them speaking." : "- Keep contractions at least as frequent as the draft has them; never expand one into its formal form."),
-      (a.burstiness < 0.45 ? "- Vary sentence length hard: mix long sentences with short ones. Include at least one sentence under five words." : "- Keep sentence lengths as varied as the draft; do not even them out."),
-      voiceMetrics(voice),
-      "- No stock transitions (moreover, furthermore, additionally, in conclusion). Connect ideas by logic or drop the connector.",
-      "- Prefer concrete specifics over abstract intensifiers.",
-      persona ? "Write in the register of this author persona. The persona shapes rhythm, word choice, hedging style, and spelling convention ONLY. Do not invent biographical details, credentials, anecdotes, opinions, or first-person experiences that are not already in the draft.\n<persona>\n" + persona + "\n</persona>" : "",
-      voice ? "Match the rhythm, vocabulary, and register of this writing sample from the author. Where the sample and the persona conflict, the sample wins.\n<voice_sample>\n" + voice + "\n</voice_sample>" : "",
-      "Return only the rewritten text. No preamble, no notes, no quotation marks around it.",
-      "<draft>\n" + text + "\n</draft>"
-    ];
-    return lines.filter(Boolean).join("\n");
-  }
-
   function setStatus(msg, isErr) {
     $("rwStatus").className = isErr ? "status err" : "status";
     $("rwStatus").textContent = msg;
   }
 
-  var PROVIDER_DEFAULTS = {
-    anthropic: { model: "claude-sonnet-4-6", keyHint: "sk-ant-..." },
-    openai: { model: "gpt-4o-mini", keyHint: "sk-..." },
-    openrouter: { model: "openai/gpt-4o-mini", keyHint: "sk-or-..." }
-  };
+  var PROVIDER_DEFAULTS = SapienizeProviders.defaults;
 
   $("settingsBtn").addEventListener("click", function () {
     $("keyRow").classList.toggle("hidden");
@@ -393,73 +427,84 @@
 
   $("provider").addEventListener("change", function () {
     var p = PROVIDER_DEFAULTS[$("provider").value];
+    $("apiKey").value = "";
     $("modelName").value = p.model;
     $("apiKey").placeholder = p.keyHint;
   });
-
-  function withTimeout(promise, ms) {
-    var t;
-    var timeout = new Promise(function (resolve, reject) {
-      t = setTimeout(function () {
-        var e = new Error("Timed out");
-        e.name = "TimeoutError";
-        reject(e);
-      }, ms);
-    });
-    return Promise.race([promise, timeout]).finally(function () { clearTimeout(t); });
-  }
-
-  async function callModel(prompt, provider, apiKey, model, words) {
-    var dynTokens = Math.min(8000, Math.max(1200, Math.round(words * 2.2) + 400));
-    var url, headers = { "Content-Type": "application/json" }, body;
-    if (provider === "anthropic") {
-      url = "https://api.anthropic.com/v1/messages";
-      var maxTokens = 1000;
-      if (apiKey) {
-        headers["x-api-key"] = apiKey;
-        headers["anthropic-version"] = "2023-06-01";
-        headers["anthropic-dangerous-direct-browser-access"] = "true";
-        maxTokens = dynTokens;
-      }
-      body = { model: model, max_tokens: maxTokens, messages: [{ role: "user", content: prompt }] };
-    } else {
-      url = provider === "openai" ? "https://api.openai.com/v1/chat/completions" : "https://openrouter.ai/api/v1/chat/completions";
-      headers["Authorization"] = "Bearer " + apiKey;
-      body = { model: model, max_tokens: dynTokens, messages: [{ role: "user", content: prompt }] };
-    }
-    var resp = await withTimeout(fetch(url, { method: "POST", headers: headers, body: JSON.stringify(body) }), 90000);
-    if (!resp.ok) {
-      var detail = "";
-      try { var eb = await resp.json(); detail = (eb.error && eb.error.message) ? eb.error.message : ""; } catch (ig) {}
-      var err = new Error(detail || ("HTTP " + resp.status));
-      err.status = resp.status;
-      throw err;
-    }
-    var data = await resp.json();
-    if (provider === "anthropic") {
-      return {
-        text: (data.content || []).filter(function (b) { return b.type === "text"; }).map(function (b) { return b.text; }).join("\n").trim(),
-        truncated: data.stop_reason === "max_tokens"
-      };
-    }
-    var choice = (data.choices && data.choices[0]) || {};
-    return {
-      text: ((choice.message && choice.message.content) || "").trim(),
-      truncated: choice.finish_reason === "length"
-    };
-  }
 
   function isNetworkError(e) {
     return e.name === "TypeError" || /NetworkError|Failed to fetch|Load failed/i.test(e.message || "");
   }
 
+  function safeProviderErrorMessage(error, secret) {
+    var message = String(error && error.message ? error.message : "Unknown provider error");
+    if (secret) message = message.split(secret).join("[redacted]");
+    return message
+      .replace(/Bearer\s+[^\s,;]+/gi, "Bearer [redacted]")
+      .replace(/\bsk-(?:ant-|or-)?[A-Za-z0-9._-]{6,}\b/g, "[redacted]");
+  }
+
+  function renderRewriteReview(semantic, voice, documentIntegrity) {
+    var rows = [];
+    var semanticDifferences = semantic && Array.isArray(semantic.differences) ? semantic.differences : [];
+    rows.push('<div class="review-title">Semantic review · ' + escapeHtml(semantic && semantic.status ? semantic.status : "unavailable") + '</div>');
+    if (semanticDifferences.length) {
+      semanticDifferences.slice(0, 8).forEach(function (difference) {
+        rows.push('<div class="review-line">' + escapeHtml((difference.severity || "review") + ": " + difference.message) + '</div>');
+      });
+      if (semanticDifferences.length > 8) rows.push('<div class="review-line">+' + (semanticDifferences.length - 8) + ' additional semantic differences in the structured result.</div>');
+    } else {
+      rows.push('<div class="review-line">No differences were found by the configured semantic checks. This is not proof of equivalence.</div>');
+    }
+    if (voice && Number.isFinite(voice.score)) {
+      rows.push('<div class="review-title">Voice comparison details · ' + voice.score + '/100 descriptive similarity</div>');
+      (voice.warnings || []).forEach(function (warning) {
+        rows.push('<div class="review-line">warning: ' + escapeHtml(warning.message) + '</div>');
+      });
+      (voice.differences || []).slice(0, 5).forEach(function (difference) {
+        rows.push('<div class="review-line">' + escapeHtml(difference.label + ": " + difference.summary + " (similarity " + difference.similarity + ")") + '</div>');
+      });
+    } else {
+      rows.push('<div class="review-title">Voice comparison</div><div class="review-line">No VoiceProfile was supplied; no voice similarity was computed.</div>');
+    }
+    if (documentIntegrity && documentIntegrity.status === "review") {
+      rows.push('<div class="review-title">Document integrity review</div>');
+      (documentIntegrity.findings || []).slice(0, 8).forEach(function (finding) {
+        rows.push('<div class="review-line">' + escapeHtml((finding.codePoint || "formatting character") + ": " + finding.message) + '</div>');
+      });
+    }
+    $("rwReview").innerHTML = rows.join("");
+  }
+
+  function incompleteRewriteMessage(result, hasApiKey) {
+    var reason = result && result.completionReason;
+    if (reason === "length" || reason === "max_tokens") {
+      return "Output hit the token cap and may be cut mid-draft. " + (hasApiKey ? "Split the draft and run in sections." : "Add an API key under API settings for a larger budget, or run in sections.");
+    }
+    if ((result && result.refused) || reason === "refusal") {
+      return "The provider refused or could not complete this rewrite. No candidate was accepted; review the partial response before using it.";
+    }
+    if (reason === "content_filter") {
+      return "The provider stopped because of its content filter. No candidate was accepted; review any partial response before using it.";
+    }
+    if (reason === "tool_calls" || reason === "function_call" || reason === "tool_use" || reason === "pause_turn") {
+      return "The provider ended with an incomplete tool or paused turn (" + reason + "). No candidate was accepted.";
+    }
+    return "The provider did not explicitly complete the rewrite" + (reason ? " (" + reason + ")" : "") + ". No candidate was accepted; review any partial response before using it.";
+  }
+
   $("rewriteBtn").addEventListener("click", async function () {
     if (!lastAnalysis) return;
     var btn = $("rewriteBtn");
+    var requestGeneration = ++rewriteRequestGeneration;
+    var sourceGeneration = analysisGeneration;
+    var sourceText = lastText;
+    var sourceResult = lastResult;
+    var sourceAnalysis = lastAnalysis;
     var apiKey = $("apiKey").value.trim();
     var provider = $("provider").value;
     var model = $("modelName").value.trim() || PROVIDER_DEFAULTS[provider].model;
-    var words = lastAnalysis.words;
+    var words = sourceAnalysis.words;
     if (provider !== "anthropic" && !apiKey) {
       $("keyRow").classList.remove("hidden");
       setStatus(provider + " always needs your own API key. Paste it above and click Rewrite again.", true);
@@ -472,35 +517,37 @@
       setStatus("Rewriting\u2026", false);
     }
     try {
-      // Converge: rewrite, sanitize, re-scan; go again while strong tells or a weak
-      // score remain, up to 3 passes. Keep the best-scoring pass. Em dashes are
-      // removed in code by sanitizeRewrite regardless of what the model returns.
       var voiceSample = $("voice").value.trim();
-      var draft = lastText, draftAnalysis = lastAnalysis, best = null, passes = 0;
-      for (var pass = 1; pass <= 3; pass++) {
-        passes = pass;
-        if (pass > 1) setStatus("Pass " + pass + "/3: clearing what pass " + (pass - 1) + " left behind\u2026", false);
-        var out = await callModel(buildPrompt(draft, draftAnalysis, voiceSample), provider, apiKey, model, words);
-        if (!out.text) throw new Error("Empty response from the model");
-        var re = analyzeText(sanitizeRewrite(out.text));
-        if (!best || re.score > best.analysis.score) best = { analysis: re, truncated: out.truncated };
-        var sev3left = re.inline.filter(function (f) { return f.sev === 3; }).length;
-        if ((re.score >= 82 && sev3left === 0) || out.truncated) break;
-        draft = re.text; draftAnalysis = re;
-      }
-      var fin = best.analysis;
-      $("rwText").textContent = fin.text;
-      $("rwDelta").innerHTML = 'score ' + lastAnalysis.score + ' \u2192 <span class="up">' + fin.score + '</span> \u00B7 ' + fin.inline.length + ' tell' + (fin.inline.length === 1 ? '' : 's') + ' remain \u00B7 ' + passes + ' pass' + (passes === 1 ? '' : 'es');
+      var result = await SapienizeCore.rewrite(sourceText, {
+        provider: provider,
+        apiKey: apiKey,
+        model: model,
+        fetch: window.fetch.bind(window),
+        voiceSample: voiceSample || null,
+        persona: personaSpec() || null,
+        maxPasses: 3
+      });
+      if (requestGeneration !== rewriteRequestGeneration || sourceGeneration !== analysisGeneration) return;
+      var finSignals = result.verification.stylisticSignals;
+      var beforeStyle = sourceResult.stylisticSignals.heuristicStyleScore.value;
+      var afterStyle = finSignals.heuristicStyleScore.value;
+      var semanticStatus = result.verification.semanticIntegrity.status;
+      var voiceMatch = result.verification.voiceMatch;
+      var voiceSummary = voiceMatch && Number.isFinite(voiceMatch.score) ? " \u00B7 voice " + voiceMatch.score : "";
+      $("rwText").textContent = result.text;
+      $("rwDelta").innerHTML = 'style ' + beforeStyle + ' \u2192 <span class="up">' + afterStyle + '</span> \u00B7 semantic ' + semanticStatus + voiceSummary + ' \u00B7 ' + result.passCount + ' pass' + (result.passCount === 1 ? '' : 'es');
+      renderRewriteReview(result.verification.semanticIntegrity, voiceMatch, result.verification.documentIntegrity);
       $("rwResult").classList.remove("hidden");
-      if (best.truncated) {
-        setStatus("Output hit the token cap and was cut mid-draft. " + (apiKey ? "Split the draft and run in sections." : "Add an API key under API settings for a larger budget, or run in sections."), true);
-        if (!apiKey) $("keyRow").classList.remove("hidden");
-      } else if (fin.score > lastAnalysis.score) {
-        setStatus("Done in " + passes + " pass" + (passes === 1 ? "" : "es") + ", zero em dashes. Read it aloud once; keep only the lines that sound like you.", false);
+      if (result.truncated) {
+        setStatus(incompleteRewriteMessage(result, Boolean(apiKey)), true);
+        if (!apiKey && (result.completionReason === "length" || result.completionReason === "max_tokens")) $("keyRow").classList.remove("hidden");
+      } else if (result.status === "review_required") {
+        setStatus("Rewrite needs review: semantic or document-integrity checks need attention. Compare it with the original before using it.", true);
       } else {
-        setStatus("Ran " + passes + " passes but the score did not improve. Edit by hand from the findings list, or try a stronger rewrite model under API settings.", false);
+        setStatus("Done in " + result.passCount + " pass" + (result.passCount === 1 ? "" : "es") + ". Facts passed the configured checks; read it aloud for the final voice decision.", false);
       }
     } catch (e) {
+      if (requestGeneration !== rewriteRequestGeneration || sourceGeneration !== analysisGeneration) return;
       if (provider === "anthropic" && !apiKey && isNetworkError(e)) {
         $("keyRow").classList.remove("hidden");
         setStatus("The keyless path only works inside a Claude artifact. Paste an API key above (or switch provider) and click Rewrite again.", true);
@@ -515,10 +562,10 @@
       } else if (e.status === 529 || e.status === 503) {
         setStatus("The API is overloaded right now. Retry in a moment.", true);
       } else {
-        setStatus("Rewrite failed: " + e.message + ". The findings list works as a manual edit checklist meanwhile.", true);
+        setStatus("Rewrite failed: " + safeProviderErrorMessage(e, apiKey) + ". The findings list works as a manual edit checklist meanwhile.", true);
       }
     } finally {
-      btn.disabled = false;
+      if (requestGeneration === rewriteRequestGeneration && sourceGeneration === analysisGeneration) btn.disabled = false;
     }
   });
 

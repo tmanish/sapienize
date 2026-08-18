@@ -1,8 +1,25 @@
-# AI-writing tells: pattern library
+# Configured stylistic signals: contextual reference
 
-Severity 3 = near-certain machine accent, always remove. Severity 2 = strong signal, remove unless the author demonstrably uses it. Severity 1 = weak signal, fix on repetition.
+This is the host-readable companion to the executable `SAPIENIZE_TELLS` library. It supports explanation and revision; it is not an AI detector, a list of forbidden phrases, or evidence of authorship. Every pattern can occur in genuine human writing, and domain context, quotations, and an authentic `VoiceProfile` take precedence over generic advice.
 
-## 1. Lexical tells
+## Contents
+
+- [Lexical signals](#1-lexical-signals)
+- [Structural signals](#2-structural-signals)
+- [Rhythm signals](#3-rhythm-signals)
+- [Voice and document-integrity observations](#4-voice-and-document-integrity-observations)
+- [What not to change automatically](#5-what-not-to-change-automatically)
+- [2026 additions](#6-2026-additions)
+
+The legacy severity value is a review-priority weight used by the backward-compatible style heuristic:
+
+- **3:** review first because the pattern is highly formulaic in the curated library.
+- **2:** review in context.
+- **1:** weak/context-sensitive observation, usually relevant only when repeated or mismatched with the requested voice.
+
+Severity is not statistical confidence or probability. A finding may be intentionally kept. The replacement column offers revision ideas, not mandatory substitutions.
+
+## 1. Lexical signals
 
 | Tell | Sev | Replace with |
 |---|---|---|
@@ -72,45 +89,49 @@ Severity 3 = near-certain machine accent, always remove. Severity 2 = strong sig
 | swiftly and | 1 | fast |
 | delightful | 1 | say what's good about it |
 
-## 2. Structural tells
+## 2. Structural signals
 
 - **"Not only X, but also Y"** (sev 2): split into two claims or keep the stronger one.
 - **"It's not just X; it's Y"** (sev 3): state Y directly.
 - **"Whether you're a X or a Y"** (sev 3): pick one reader and write to them.
 - **"In conclusion / In summary"** (sev 3/2): just conclude.
-- **Rule-of-three overload** (sev 2): more than ~1 in 6 sentences shaped as "X, Y, and Z." One triple is rhetoric; six is a pattern. Break most into unequal pieces.
-- **Uniform paragraph blocks** (sev 2): every paragraph the same size. Let paragraphs sprawl and shrink with the idea. One-sentence paragraphs are legal.
+- **Rule-of-three density** (sev 2): repeated "X, Y, and Z" constructions can sound templated. Compare the frequency with the authentic profile and revise only when it is out of character or obscures the point.
+- **Uniform paragraph blocks** (sev 2): similarly sized paragraphs are worth reviewing, but may be correct for a constrained format. Let the idea and the author's profile determine paragraph shape.
 - **"Here are some..." list preambles** (sev 1): go straight to the first item.
-- **Bold-label bullet formatting** where prose was requested (sev 2): convert to sentences.
+- **Manual/context-only — bold-label bullet formatting** where prose was requested: this is host guidance, not an executable `SAPIENIZE_TELLS` check. Convert to sentences only when the requested format calls for prose.
 
-## 3. Rhythm tells
+## 3. Rhythm signals
 
-- **Flat burstiness** (sev 3): sentence lengths barely vary. Target: in any 150+ word passage, at least one sentence of 6 words or fewer and at least one over 25. Read aloud; where you'd breathe, cut.
+- **Low sentence-length variation** (sev 3): sentence lengths barely vary. Report the measured distribution and compare it with the authentic profile; do not manufacture a short/long sentence quota when the author's cadence is genuinely even.
 - **Moreover / Furthermore / Additionally / In addition sentence openers** (sev 2): use and, also, plus, or no connector.
 - **Monotone stretches** (sev 2): 3+ consecutive sentences within a few words of the same length. Break one.
 - **Repeated openers** (sev 1): 3+ sentences starting with the same non-trivial word.
 - **"However, it is..."** (sev 1): but it's.
 
-## 4. Voice tells
+## 4. Voice and document-integrity observations
 
-- **Missing contractions** (sev 3 when near-total): "do not," "it is," "cannot" everywhere reads machine-formal. Contract wherever the author would when speaking, unless their sample is formal.
-- **Em dash overuse** (sev 3): more than ~4 per 1,000 words. The restored draft ships with zero: convert every one to a comma, a period, or parentheses.
-- **Invisible characters** (sev 3): zero-width spaces or joiners inside words are scanner-evasion residue, not writing. Strip them.
-- **Semicolon density in casual registers** (sev 1).
-- **Abstract intensifiers** (sev 2): "significantly improved," "greatly enhanced." Replace with the number or the concrete effect.
-- **No first person in a personal piece** (sev 2): if the piece claims experience, the author should appear in it. Add the I: the mistake made, the thing tried, the opinion held.
-- **Perfect hedged balance** (sev 1): every claim immediately counterweighted ("however, it is also important to consider"). Humans commit. Let at least one opinion stand unqualified.
+- **Contraction behavior** (legacy sev 3 when near-total expansions trigger the rule): compare "do not," "it is," and similar forms with the requested register and authentic profile. Formal expansions may be genuine voice; do not contract by default.
+- **Em dash frequency** (legacy sev 3 above the configured threshold): report density and compare it with the authentic profile. There is no universal zero-em-dash rule. Keep or revise each dash according to meaning and the author's punctuation habits.
+- **Invisible or directional characters**: report these through document integrity. They may be intentional formatting, accidental residue, or suspicious manipulation, but they are not evidence of a watermark or AI authorship. Do not remove them merely to change provenance; surface them for review.
+- **Semicolon density** (sev 1): contextual, especially across technical, legal, academic, and casual registers.
+- **Manual/context-only — abstract intensifiers**: phrases such as "significantly improved" or "greatly enhanced" need evidence-aware review, but this is not an executable check. Prefer a number or concrete effect when the source supports one.
+- **Manual/context-only — no first person in a personal piece**: this is host guidance, not an executable check. Ask the author about a possible mismatch; never invent an experience, action, or opinion.
+- **Manual/context-only — repeated hedged balance**: this is host guidance, not an executable check. Hedging can be essential, so preserve the original certainty and compare it with the author's register.
 
-## 5. What NOT to touch
+## 5. What not to change automatically
 
 - Domain vocabulary that overlaps the list: "robust" in statistics, "leverage" in finance, "pivotal" in a history of hinges. Judgment beats the table.
-- The author's genuine idioms, even if unusual. The goal is their voice, not a generic casual voice.
+- The author's measured habits and genuine idioms, even when they overlap a configured signal. The goal is their voice, not generic casual prose.
 - Facts, numbers, names, links, quotes. Never paraphrase a quotation.
 - Correctness. Never introduce an error to sound casual.
+- Negation, uncertainty, modality, conditions, or claim scope.
+- Punctuation merely to improve the legacy style heuristic.
+
+Never use this library to optimize against a named detector. External detector observations and provenance signals are measurement-only and do not belong in rewrite objectives.
 
 ## 6. 2026 additions
 
-Patterns that became dominant tells in the 2025-2026 model generation. Same severity scale.
+Patterns added to the curated library during 2025-2026 maintenance. They have not been established as calibrated evidence of model generation. Use the same contextual review-priority scale described above.
 
 **Negative parallelism and hook constructions (structure)**
 
