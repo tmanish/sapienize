@@ -10,6 +10,13 @@ const {
 } = require("../eval/schema.js");
 const { parseDataset, loadDataset, datasetFingerprint } = require("../eval/dataset.js");
 const {
+  DatasetManifestValidationError,
+  validateDatasetManifest,
+  loadDatasetManifest,
+  datasetManifestFingerprint,
+  selectDatasetSplit
+} = require("../eval/manifest.js");
+const {
   confusionMatrix,
   classificationMetrics,
   rocAuc,
@@ -33,6 +40,10 @@ async function test(name, fn) {
 
 function close(actual, expected, tolerance) {
   assert.ok(Math.abs(actual - expected) <= (tolerance || 1e-12), actual + " != " + expected);
+}
+
+function jsonClone(value) {
+  return JSON.parse(JSON.stringify(value));
 }
 
 (async () => {
@@ -67,6 +78,8 @@ function close(actual, expected, tolerance) {
 
   const fixturePath = path.join(__dirname, "..", "eval", "fixtures", "public-synthetic.jsonl");
   const records = loadDataset(fixturePath);
+  const manifestPath = path.join(__dirname, "..", "eval", "fixtures", "public-synthetic.manifest.json");
+  const manifest = loadDatasetManifest(manifestPath, { records });
 
   await test("public fixture is synthetic, licensed, and covers all source types", () => {
     assert.strictEqual(records.length, 5);
@@ -75,6 +88,140 @@ function close(actual, expected, tolerance) {
       assert.strictEqual(record.metadata.synthetic, true);
       assert.strictEqual(record.metadata.license, "CC0-1.0");
     });
+  });
+
+  await test("public manifest binds governance, lineage, and a frozen evaluation split", () => {
+    assert.strictEqual(manifest.schema_version, 1);
+    assert.strictEqual(manifest.dataset.fingerprint.value, datasetFingerprint(records));
+    assert.strictEqual(manifest.sources[0].license.identifier, "CC0-1.0");
+    assert.strictEqual(manifest.sources[0].consent.status, "not_applicable_synthetic");
+    assert.deepStrictEqual(manifest.sources[0].rights.permitted_uses, ["evaluation"]);
+    assert.strictEqual(manifest.sources[0].rights.redistribution.status, "permitted");
+    assert.strictEqual(manifest.sources[0].rights.attribution.required, false);
+    assert.strictEqual(manifest.sources[0].rights.withdrawal.supported, false);
+    assert.strictEqual(manifest.sources[0].collection.method, "project_authored_synthetic_fixture");
+    assert.strictEqual(manifest.sources[0].privacy.classification, "public");
+    assert.strictEqual(manifest.split_policy.frozen, true);
+    assert.deepStrictEqual(selectDatasetSplit(records, manifest, "evaluation"), records);
+    assert.strictEqual(datasetManifestFingerprint(manifest), datasetManifestFingerprint(jsonClone(manifest)));
+  });
+
+  await test("manifest validation rejects every non-JSON-roundtrippable object shape without invoking getters", () => {
+    const assertInvalid = (candidate, pattern) => assert.throws(
+      () => validateDatasetManifest(candidate),
+      pattern || DatasetManifestValidationError
+    );
+
+    const nonEnumerable = jsonClone(manifest);
+    Object.defineProperty(nonEnumerable.dataset, "hidden", { value: true, enumerable: false });
+    assertInvalid(nonEnumerable, /enumerable data property/);
+
+    let getterInvoked = false;
+    const accessor = jsonClone(manifest);
+    Object.defineProperty(accessor.dataset, "description", {
+      enumerable: true,
+      get() {
+        getterInvoked = true;
+        throw new Error("hostile getter invoked");
+      }
+    });
+    assertInvalid(accessor, /enumerable data property/);
+    assert.strictEqual(getterInvoked, false);
+
+    const symbolProperty = jsonClone(manifest);
+    symbolProperty.dataset[Symbol("hidden")] = true;
+    assertInvalid(symbolProperty, /symbol properties/);
+
+    const customArray = jsonClone(manifest);
+    Object.setPrototypeOf(customArray.splits, Object.create(Array.prototype));
+    assertInvalid(customArray, /standard Array prototype/);
+
+    const sparseArray = jsonClone(manifest);
+    sparseArray.splits = new Array(2);
+    sparseArray.splits[0] = jsonClone(manifest.splits[0]);
+    assertInvalid(sparseArray, /sparse arrays/);
+
+    const circular = jsonClone(manifest);
+    circular.dataset.description = circular;
+    assertInvalid(circular, /circular references/);
+
+    const undefinedValue = jsonClone(manifest);
+    undefinedValue.dataset.description = undefined;
+    assertInvalid(undefinedValue, /only JSON values/);
+
+    const nonFinite = jsonClone(manifest);
+    nonFinite.dataset.record_count = Infinity;
+    assertInvalid(nonFinite, /finite numbers/);
+  });
+
+  await test("manifest binding rejects changed data and incomplete AI lineage metadata", () => {
+    const changed = records.map(record => Object.assign({}, record));
+    changed[0].text += " Changed.";
+    assert.throws(() => validateDatasetManifest(manifest, changed), DatasetManifestValidationError);
+
+    const missingGeneration = jsonClone(manifest);
+    delete missingGeneration.records.find(record => record.id === "public-ai-001").generation;
+    assert.throws(
+      () => validateDatasetManifest(missingGeneration, records),
+      /must declare model grouping and generation metadata/
+    );
+  });
+
+  await test("frozen splits reject author, model, lineage, and source-document leakage", () => {
+    for (const groupKey of ["author_group", "model_group", "lineage_group", "source_document_group"]) {
+      const leaky = jsonClone(manifest);
+      leaky.records[0][groupKey] = "shared-group";
+      leaky.records[1][groupKey] = "shared-group";
+      leaky.splits = [
+        { name: "train", purpose: "training", record_ids: [leaky.records[0].id] },
+        { name: "evaluation", purpose: "held-out evaluation", record_ids: leaky.records.slice(1).map(record => record.id) }
+      ];
+      assert.throws(
+        () => validateDatasetManifest(leaky),
+        new RegExp(groupKey + ".*leaks across frozen splits")
+      );
+    }
+
+    const incompletePolicy = jsonClone(manifest);
+    incompletePolicy.split_policy.leakage_group_keys = ["author_group", "model_group"];
+    assert.throws(() => validateDatasetManifest(incompletePolicy), /must include lineage_group/);
+  });
+
+  await test("rights and private-local storage are explicit governance gates", () => {
+    const noEvaluationRight = jsonClone(manifest);
+    noEvaluationRight.sources[0].rights.permitted_uses = ["detector_training"];
+    assert.throws(() => validateDatasetManifest(noEvaluationRight), /must include `evaluation`/);
+
+    const privateManifest = jsonClone(manifest);
+    privateManifest.sources[0].privacy.classification = "private_local";
+    assert.throws(() => validateDatasetManifest(privateManifest), /eval\/.local/);
+    privateManifest.sources[0].privacy.storage = "eval/.local/";
+    validateDatasetManifest(privateManifest);
+  });
+
+  await test("dataset binding rejects exact normalized duplicates across frozen splits", () => {
+    const duplicateRecords = records.map(jsonClone);
+    duplicateRecords.find(record => record.id === "public-human-001").text = "Shared\u00a0fixture text.";
+    duplicateRecords.find(record => record.id === "public-edited-001").text = "Shared   fixture\ntext.";
+
+    const duplicateManifest = jsonClone(manifest);
+    duplicateManifest.dataset.fingerprint.value = datasetFingerprint(duplicateRecords);
+    duplicateManifest.splits = [
+      {
+        name: "train",
+        purpose: "training",
+        record_ids: ["public-human-001", "public-ai-001", "public-polished-001"]
+      },
+      {
+        name: "evaluation",
+        purpose: "held-out evaluation",
+        record_ids: ["public-edited-001", "public-mixed-001"]
+      }
+    ];
+    assert.throws(
+      () => validateDatasetManifest(duplicateManifest, duplicateRecords),
+      /exact normalized duplicate text.*crosses frozen splits/
+    );
   });
 
   await test("known confusion-matrix and classification values", () => {

@@ -2,5 +2,8 @@
 node_modules/
 .claude/
 
+# Private evaluation corpora, consent records, detector responses, and run output.
+eval/.local/
+
 # superseded: source now lives in src/, tests/, skill/, .github/
 sapienize-devkit.zip

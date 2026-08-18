@@ -1,0 +1,202 @@
+{
+  "schema_version": 1,
+  "dataset": {
+    "id": "sapienize-public-synthetic",
+    "version": "1.0.0",
+    "description": "Public synthetic records used only to verify evaluation plumbing and data-governance validation.",
+    "record_count": 5,
+    "fingerprint": {
+      "algorithm": "sha256",
+      "value": "12190771587fb96f6c466d1e2106c7da065a32eaeb06dca6d9efe43eebf9795d"
+    }
+  },
+  "sources": [
+    {
+      "id": "project-authored-synthetic",
+      "license": {
+        "identifier": "CC0-1.0",
+        "scope": "Fixture text and manifest metadata",
+        "url": "https://creativecommons.org/publicdomain/zero/1.0/"
+      },
+      "consent": {
+        "status": "not_applicable_synthetic",
+        "basis": "The fixture was written for testing and contains no real person's writing sample."
+      },
+      "rights": {
+        "permitted_uses": [
+          "evaluation"
+        ],
+        "redistribution": {
+          "status": "permitted",
+          "conditions": "Redistribution is permitted under CC0-1.0."
+        },
+        "attribution": {
+          "required": false,
+          "instructions": "Attribution is not required under CC0-1.0."
+        },
+        "withdrawal": {
+          "supported": false,
+          "handling": "The records are project-authored synthetic fixtures and are not linked to a contributing person."
+        }
+      },
+      "collection": {
+        "method": "project_authored_synthetic_fixture",
+        "description": "Contributors created these short synthetic examples specifically to exercise source-type and evaluator plumbing."
+      },
+      "privacy": {
+        "classification": "public",
+        "contains_personal_data": false,
+        "storage": "repository",
+        "handling": "Safe to commit; do not substitute private voice samples into this fixture."
+      }
+    }
+  ],
+  "records": [
+    {
+      "id": "public-human-001",
+      "source_id": "project-authored-synthetic",
+      "domain": "personal_note",
+      "language": "en",
+      "author_group": "synthetic-author-a",
+      "lineage_group": "lineage-public-human-001",
+      "source_document_group": "source-document-public-human-001",
+      "lineage": [
+        {
+          "sequence": 1,
+          "actor_type": "human",
+          "operation": "project_authored_synthetic_text"
+        }
+      ]
+    },
+    {
+      "id": "public-ai-001",
+      "source_id": "project-authored-synthetic",
+      "domain": "workplace",
+      "language": "en",
+      "model_group": "synthetic-fixture-model-a",
+      "lineage_group": "lineage-public-ai-001",
+      "source_document_group": "source-document-public-ai-001",
+      "generation": {
+        "provider": "synthetic-fixture",
+        "model": "fixture-model-a",
+        "version": "1.0"
+      },
+      "lineage": [
+        {
+          "sequence": 1,
+          "actor_type": "ai",
+          "operation": "simulated_generation"
+        }
+      ]
+    },
+    {
+      "id": "public-polished-001",
+      "source_id": "project-authored-synthetic",
+      "domain": "personal_note",
+      "language": "en",
+      "author_group": "synthetic-author-b",
+      "model_group": "synthetic-fixture-model-a",
+      "lineage_group": "lineage-public-polished-001",
+      "source_document_group": "source-document-public-polished-001",
+      "generation": {
+        "provider": "synthetic-fixture",
+        "model": "fixture-model-a",
+        "version": "1.0"
+      },
+      "lineage": [
+        {
+          "sequence": 1,
+          "actor_type": "human",
+          "operation": "project_authored_synthetic_text"
+        },
+        {
+          "sequence": 2,
+          "actor_type": "ai",
+          "operation": "simulated_grammar_polish"
+        }
+      ]
+    },
+    {
+      "id": "public-edited-001",
+      "source_id": "project-authored-synthetic",
+      "domain": "technical",
+      "language": "en",
+      "author_group": "synthetic-editor-a",
+      "model_group": "synthetic-fixture-model-b",
+      "lineage_group": "lineage-public-edited-001",
+      "source_document_group": "source-document-public-edited-001",
+      "generation": {
+        "provider": "synthetic-fixture",
+        "model": "fixture-model-b",
+        "version": "1.0"
+      },
+      "lineage": [
+        {
+          "sequence": 1,
+          "actor_type": "ai",
+          "operation": "simulated_generation"
+        },
+        {
+          "sequence": 2,
+          "actor_type": "human",
+          "operation": "project_authored_substantive_edit"
+        }
+      ]
+    },
+    {
+      "id": "public-mixed-001",
+      "source_id": "project-authored-synthetic",
+      "domain": "workplace",
+      "language": "en",
+      "author_group": "synthetic-author-c",
+      "model_group": "synthetic-fixture-model-b",
+      "lineage_group": "lineage-public-mixed-001",
+      "source_document_group": "source-document-public-mixed-001",
+      "generation": {
+        "provider": "synthetic-fixture",
+        "model": "fixture-model-b",
+        "version": "1.0"
+      },
+      "lineage": [
+        {
+          "sequence": 1,
+          "actor_type": "human",
+          "operation": "project_authored_sections"
+        },
+        {
+          "sequence": 2,
+          "actor_type": "ai",
+          "operation": "simulated_generated_sections"
+        },
+        {
+          "sequence": 3,
+          "actor_type": "human",
+          "operation": "project_authored_assembly"
+        }
+      ]
+    }
+  ],
+  "split_policy": {
+    "frozen": true,
+    "assignment": "exactly_once",
+    "leakage_group_keys": [
+      "author_group",
+      "model_group",
+      "lineage_group",
+      "source_document_group"
+    ]
+  },
+  "splits": [
+    {
+      "name": "evaluation",
+      "purpose": "Evaluator plumbing only; not an accuracy benchmark",
+      "record_ids": [
+        "public-human-001",
+        "public-ai-001",
+        "public-polished-001",
+        "public-edited-001",
+        "public-mixed-001"
+      ]
+    }
+  ]
+}

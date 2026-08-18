@@ -40,7 +40,7 @@ Authoritative source files:
 - `src/core/`: provider-neutral public API and structured result validation.
 - `src/engine.js`: backward-compatible v1 facade and executable `SAPIENIZE_TELLS` library.
 - `src/sapienize_shell.html`: browser UI, styles, and browser workflow.
-- `eval/`: dataset schema/parser, metrics, evaluator, and non-private fixtures.
+- `eval/`: dataset and governance-manifest validation, metrics, evaluator, and non-private fixtures.
 - `skill/sapienize/`: Claude skill source and host-readable stylistic reference.
 - `tests/`: regression and integration tests.
 - `build.py`: the authoritative bundle/package recipe.
@@ -131,7 +131,7 @@ External detector adapters are measurement integrations, not rewrite integration
 
 Credentials and legitimate API access are supplied by the user/environment. Unit tests use mocks. Do not call paid services in the default test or evaluation suite.
 
-Evaluation records must conform to `eval/schema.js`. Keep runs reproducible, include seed/configuration and a dataset fingerprint, and report unavailable metrics as unavailable rather than zero. Calibration error is valid only for values explicitly declared calibrated. Report per-domain, per-model, and document-length slices when the data supports them. Never commit private author data.
+Evaluation records must conform to `eval/schema.js`. Non-synthetic benchmark data must also use the governance protocol in `docs/evaluation-data-protocol.md` and a manifest validated by `eval/manifest.js`. Keep runs reproducible, include seed/configuration and dataset/manifest fingerprints, and report unavailable metrics as unavailable rather than zero. Calibration error is valid only for values explicitly declared calibrated. Report per-domain, per-model, and document-length slices when the data supports them. Never commit private author data; keep it under the ignored `eval/.local/` boundary.
 
 ## Browser compatibility
 
