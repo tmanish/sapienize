@@ -249,4 +249,4 @@ None of these is an executable `SAPIENIZE_TELLS` check. They are host guidance f
 - Negation, uncertainty, modality, conditions, or claim scope.
 - Punctuation merely to improve the legacy style heuristic.
 
-Never use this library to optimize against a named detector. External detector observations and provenance signals are measurement-only and do not belong in rewrite objectives.
+This library is not a detector surrogate. Explicit detector-aware refinement requires actual configured vendor observations and protected-content/voice gates; never infer detector scores from these tells. Provenance signals do not belong in rewrite objectives.

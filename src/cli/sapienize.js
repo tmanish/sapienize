@@ -30,21 +30,44 @@ const HELP = `Sapienize v2 command-line interface
 
 Usage:
   sapienize scan <file|-> [--output <file>]
+  sapienize detect <file|-> [--detector gptzero] [--api-key-env <name>] [--output <file>]
   sapienize profile <file|directory|-> [--output <file>]
-  sapienize rewrite <file|-> --voice <profile.json> [options]
+  sapienize rewrite <file|-> (--voice <profile.json> | --samples <file|directory>) [options]
+  sapienize generate <brief|-> (--voice <profile.json> | --samples <file|directory>) [options]
   sapienize verify <original> <rewrite> [--output <file>]
   sapienize provenance <file|-> [--output <file>]
   sapienize eval <dataset.json|dataset.jsonl|-> [options]
+  sapienize audit <dataset.json|dataset.jsonl|-> [--manifest <file|->] [--output <file>]
 
-Rewrite options:
-  --voice <file>             VoiceProfile JSON (required)
+Writing options (rewrite and generate):
+  --voice <file>             VoiceProfile JSON; choose this or --samples
+  --samples <file|directory|-> Authentic writing samples used to build a profile
   --provider <name>          anthropic, openai, or openrouter (default: anthropic)
   --model <name>             Override the provider's default model
   --api-key-env <name>       Read the API key from this environment variable
   --persona <text>           Optional requested persona
+  --detector-passes <number> Opt in to GPTZero refinement, 1–3 measurements (needs GPTZERO_API_KEY)
+
+Generation options:
+  --facts <file|->           Source facts to preserve and check against the draft
+  --words <number>           Target length, 50–3000 words (default: 400)
+  --content-mode <mode>      factual (default) or fiction; fiction permits invented dialogue/actions
+  --voice-passes <number>    1–3 voice-guided drafts (default: 1); each uses a provider call
+
+Detection uses GPTZERO_API_KEY by default and sends text to GPTZero.
+Its human/AI-only/mixed probabilities are vendor-specific, not proof of authorship.
+Generation always returns a draft for review (exit 4), including factual grounding.
 
 Evaluation options:
   --observations <file|->    JSON or JSONL detector observations
+  --manifest <file|->        Governance manifest (required for non-synthetic data)
+  --split <name>             Explicit frozen split (required with --manifest)
+  --seed <value>             Reproducible analyzer seed (default: 0)
+  --threshold <number>       Explicit detector decision threshold on its own scale
+
+Audit is local and reports exact/near duplicates without invoking an analyzer.
+Cross-split duplicates fail evaluation; same-split duplicates remain review items.
+Without a manifest, eval accepts only records marked metadata.synthetic: true.
 
 General options:
   --output <file|->          Write JSON to a file (or - for stdout)
@@ -128,7 +151,10 @@ function resolveDependencies(overrides) {
     core: supplied.core || require("../core/index.js"),
     dataset: supplied.dataset || require("../../eval/dataset.js"),
     evaluator: supplied.evaluator || require("../../eval/evaluator.js"),
+    manifest: supplied.manifest || require("../../eval/manifest.js"),
+    duplicates: supplied.duplicates || require("../../eval/duplicates.js"),
     provider: supplied.provider,
+    detector: supplied.detector,
     createProvider: providerFactory
   };
 }
@@ -365,6 +391,21 @@ async function scanCommand(parsed, context) {
   return EXIT_CODES.success;
 }
 
+async function detectCommand(parsed, context) {
+  requirePositionals("detect", parsed, 1, "<file|->");
+  const detectorName = parsed.options.detector || "gptzero";
+  if (detectorName !== "gptzero") throw usageError("--detector must be gptzero");
+  const environmentName = parsed.options.apiKeyEnv || "GPTZERO_API_KEY";
+  if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(environmentName)) throw usageError("--api-key-env must be a valid environment variable name");
+  const apiKey = context.io.env && context.io.env[environmentName];
+  if (!apiKey && !context.deps.detector) throw new CliError("missing API key in environment variable `" + environmentName + "`", "MISSING_API_KEY");
+  if (apiKey) context.secrets.push(apiKey);
+  const text = await readInput(parsed.positionals[0], context);
+  const result = await context.deps.core.detect(text, { detector: context.deps.detector || detectorName, apiKey });
+  writeResult(result, parsed.options.output, context);
+  return EXIT_CODES.success;
+}
+
 async function profileCommand(parsed, context) {
   requirePositionals("profile", parsed, 1, "<file|directory|->");
   const samples = await readProfileSamples(parsed.positionals[0], parsed.options.output, context);
@@ -380,9 +421,17 @@ function providerForRewrite(name, configuration, context) {
 }
 
 async function rewriteCommand(parsed, context) {
-  requirePositionals("rewrite", parsed, 1, "<file|-> and requires --voice <profile.json>");
-  if (!parsed.options.voice) throw usageError("rewrite requires --voice <profile.json>");
-  rejectRepeatedStdin("rewrite", [parsed.positionals[0], parsed.options.voice]);
+  return writingCommand(parsed, context, "rewrite");
+}
+
+async function generateCommand(parsed, context) {
+  return writingCommand(parsed, context, "generate");
+}
+
+async function writingCommand(parsed, context, mode) {
+  requirePositionals(mode, parsed, 1, "<file|-> with --voice or --samples");
+  if (Boolean(parsed.options.voice) === Boolean(parsed.options.samples)) throw usageError(mode + " requires exactly one of --voice or --samples");
+  rejectRepeatedStdin(mode, [parsed.positionals[0], parsed.options.voice, parsed.options.samples, parsed.options.facts]);
 
   const providerName = parsed.options.provider || "anthropic";
   if (!Object.prototype.hasOwnProperty.call(PROVIDER_ENV, providerName)) {
@@ -399,21 +448,47 @@ async function rewriteCommand(parsed, context) {
   if (apiKey) context.secrets.push(apiKey);
 
   const text = await readInput(parsed.positionals[0], context);
-  const profileText = await readInput(parsed.options.voice, context);
-  const voiceProfile = parseJson(profileText, parsed.options.voice);
-  if (!voiceProfile || typeof voiceProfile !== "object" || Array.isArray(voiceProfile)) {
-    throw dataError("VoiceProfile `" + parsed.options.voice + "` must contain a JSON object");
+  let voiceProfile, voiceSamples;
+  if (parsed.options.samples) {
+    voiceSamples = await readProfileSamples(parsed.options.samples, parsed.options.output, context);
+    voiceProfile = context.deps.core.createVoiceProfile(voiceSamples);
+  } else {
+    voiceProfile = parseJson(await readInput(parsed.options.voice, context), parsed.options.voice);
+    if (!voiceProfile || typeof voiceProfile !== "object" || Array.isArray(voiceProfile)) {
+      throw dataError("VoiceProfile `" + parsed.options.voice + "` must contain a JSON object");
+    }
   }
 
   const provider = providerForRewrite(providerName, { apiKey, model: parsed.options.model }, context);
-  const result = await context.deps.core.rewrite(text, {
+  const writingOptions = {
     voiceProfile,
+    voiceSamples,
     provider,
     providerName,
     model: parsed.options.model,
     apiKey,
     persona: parsed.options.persona
-  });
+  };
+  if (parsed.options.detectorPasses !== undefined) {
+    const maxPasses = Number(parsed.options.detectorPasses);
+    if (!Number.isInteger(maxPasses) || maxPasses < 1 || maxPasses > 3) throw usageError("--detector-passes must be 1 to 3");
+    const detectorKey = context.io.env && context.io.env.GPTZERO_API_KEY;
+    if (!detectorKey) throw new CliError("detector refinement requires GPTZERO_API_KEY", "MISSING_API_KEY");
+    context.secrets.push(detectorKey);
+    writingOptions.detectorRefinement = { apiKey: detectorKey, maxPasses: maxPasses };
+  }
+  if (mode === "generate") {
+    if (parsed.options.contentMode !== undefined) writingOptions.contentMode = parsed.options.contentMode;
+    if (parsed.options.voicePasses !== undefined) writingOptions.maxVoicePasses = Number(parsed.options.voicePasses);
+    if (parsed.options.facts) writingOptions.sourceFacts = await readInput(parsed.options.facts, context);
+    if (parsed.options.words !== undefined) {
+      writingOptions.targetWords = Number(parsed.options.words);
+      if (!Number.isInteger(writingOptions.targetWords) || writingOptions.targetWords < 50 || writingOptions.targetWords > 3000) {
+        throw usageError("--words must be an integer from 50 to 3000");
+      }
+    }
+  }
+  const result = await context.deps.core[mode](text, writingOptions);
   writeResult(result, parsed.options.output, context);
   if (result && (result.status === "review_required" || result.accepted === false)) return EXIT_CODES.reviewRequired;
   return EXIT_CODES.success;
@@ -445,10 +520,10 @@ async function provenanceCommand(parsed, context) {
   return EXIT_CODES.success;
 }
 
-async function evalCommand(parsed, context) {
-  requirePositionals("eval", parsed, 1, "<dataset.json|dataset.jsonl|->");
+async function readEvaluationInputs(parsed, context, command) {
+  requirePositionals(command, parsed, 1, "<dataset.json|dataset.jsonl|->");
   const target = parsed.positionals[0];
-  rejectRepeatedStdin("eval", [target, parsed.options.observations]);
+  rejectRepeatedStdin(command, [target, parsed.options.observations, parsed.options.manifest]);
   const input = await readInput(target, context);
   let records;
   try {
@@ -459,12 +534,42 @@ async function evalCommand(parsed, context) {
     throw dataError(error.message);
   }
 
+  let manifest;
+  if (parsed.options.manifest) {
+    // Binding and leakage checks run in the shared evaluator/audit layer.
+    manifest = context.deps.manifest.parseDatasetManifest(await readInput(parsed.options.manifest, context));
+  }
+  return { records, manifest };
+}
+
+async function auditCommand(parsed, context) {
+  const { records, manifest } = await readEvaluationInputs(parsed, context, "audit");
+  const result = manifest
+    ? context.deps.manifest.auditDatasetManifest(manifest, records)
+    : context.deps.duplicates.auditDuplicates(records);
+  if (manifest) result.manifestFingerprint = context.deps.manifest.datasetManifestFingerprint(manifest);
+  writeResult(result, parsed.options.output, context);
+  return result.status === "fail" ? EXIT_CODES.operationalError
+    : result.status === "review" ? EXIT_CODES.reviewRequired : EXIT_CODES.success;
+}
+
+async function evalCommand(parsed, context) {
+  if (Boolean(parsed.options.manifest) !== Boolean(parsed.options.split)) {
+    throw usageError("eval requires --manifest and --split together");
+  }
+  const { records, manifest } = await readEvaluationInputs(parsed, context, "eval");
   let observations;
   if (parsed.options.observations) {
     const observationText = await readInput(parsed.options.observations, context);
     observations = parseObservations(observationText, parsed.options.observations);
   }
-  const evaluationOptions = { observations };
+  const evaluationOptions = { observations, manifest, split: parsed.options.split };
+  if (parsed.options.seed !== undefined) evaluationOptions.seed = parsed.options.seed;
+  if (parsed.options.threshold !== undefined) {
+    const threshold = Number(parsed.options.threshold);
+    if (!parsed.options.threshold.trim() || !Number.isFinite(threshold)) throw usageError("--threshold must be a finite number");
+    evaluationOptions.threshold = threshold;
+  }
   if (context.deps.core && typeof context.deps.core.analyze === "function") {
     evaluationOptions.analyzer = context.deps.core.analyze.bind(context.deps.core);
   }
@@ -484,6 +589,10 @@ async function evalCommand(parsed, context) {
 }
 
 const COMMANDS = Object.freeze({
+  detect: {
+    options: new Set(["--detector", "--api-key-env", "--output"]),
+    execute: detectCommand
+  },
   scan: {
     options: new Set(["--output"]),
     execute: scanCommand
@@ -493,8 +602,12 @@ const COMMANDS = Object.freeze({
     execute: profileCommand
   },
   rewrite: {
-    options: new Set(["--voice", "--provider", "--model", "--api-key-env", "--persona", "--output"]),
+    options: new Set(["--voice", "--samples", "--provider", "--model", "--api-key-env", "--persona", "--detector-passes", "--output"]),
     execute: rewriteCommand
+  },
+  generate: {
+    options: new Set(["--voice", "--samples", "--provider", "--model", "--api-key-env", "--persona", "--facts", "--words", "--content-mode", "--voice-passes", "--detector-passes", "--output"]),
+    execute: generateCommand
   },
   verify: {
     options: new Set(["--output"]),
@@ -505,8 +618,12 @@ const COMMANDS = Object.freeze({
     execute: provenanceCommand
   },
   eval: {
-    options: new Set(["--observations", "--output"]),
+    options: new Set(["--observations", "--manifest", "--split", "--seed", "--threshold", "--output"]),
     execute: evalCommand
+  },
+  audit: {
+    options: new Set(["--manifest", "--output"]),
+    execute: auditCommand
   }
 });
 

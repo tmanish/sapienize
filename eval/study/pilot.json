@@ -1,0 +1,29 @@
+{
+  "schemaVersion": 1,
+  "id": "independent-effectiveness-pilot-v1",
+  "seed": 20261029,
+  "repeats": 2,
+  "lengths": [350, 700],
+  "models": [
+    {"id": "openai", "provider": "openai", "modelEnv": "STUDY_OPENAI_MODEL", "keyEnv": "OPENAI_API_KEY"},
+    {"id": "claude", "provider": "anthropic", "modelEnv": "STUDY_ANTHROPIC_MODEL", "keyEnv": "ANTHROPIC_API_KEY"},
+    {"id": "third-family", "provider": "openrouter", "modelEnv": "STUDY_OPENROUTER_MODEL", "keyEnv": "OPENROUTER_API_KEY"}
+  ],
+  "feedbackDetector": "gptzero",
+  "judges": ["gptzero", "copyleaks", "originality"],
+  "heldoutJudges": ["copyleaks", "originality"],
+  "thresholds": {"gptzero": 0.5, "copyleaks": 0.05, "originality": 0.05},
+  "originalityModel": "model-5.0",
+  "humanDataset": "eval/.local/effectiveness/human.jsonl",
+  "humanManifest": "eval/.local/effectiveness/human.manifest.json",
+  "referenceSplit": "voice_reference",
+  "controlSplit": "human_control",
+  "cases": [
+    {"id":"work-library","domain":"historical_prose","contentMode":"factual","brief":"Write a clear update for local library users. Use only the source facts; do not invent quotations or background.","facts":"The library will reopen on 12 November 2026. Opening hours will be 9 a.m. to 6 p.m. Membership remains free. Roof repairs cost 24000 pounds. The reading room will remain closed until 19 November 2026."},
+    {"id":"work-delivery","domain":"historical_prose","contentMode":"factual","brief":"Write a project update for colleagues. Explain the implications without adding facts, quotations or evidence.","facts":"The pilot delivered 120 packages to 4 sites. Three packages arrived late. No package was lost. The team will review the route plan on 18 November 2026. The results do not establish performance for other routes."},
+    {"id":"academic-water","domain":"scientific_exposition","contentMode":"factual","brief":"Write an explanatory discussion of this hypothetical classroom experiment. Preserve limitations; invent no citations or results.","facts":"The classroom experiment used 24 plant pots. Twelve received 100 millilitres of water daily and twelve received 150 millilitres. After 14 days, mean growth was 8 centimetres and 9 centimetres respectively. Light was not controlled. These observations do not establish a causal effect."},
+    {"id":"academic-survey","domain":"scientific_exposition","contentMode":"factual","brief":"Discuss this hypothetical survey for a university methods class. Clearly distinguish observations from causal conclusions. Do not invent sources.","facts":"A voluntary survey received 180 responses from 600 invitations. Ninety respondents preferred online tutorials. The survey recorded preferences, not learning outcomes. Nonresponse bias is possible. The findings cannot be generalized to all students."},
+    {"id":"fiction-sign","domain":"fiction","contentMode":"fiction","brief":"Write an original fictional scene for adults with narration and dialogue. Invent small actions and conversation within these facts; do not reuse sample plots or characters.","facts":"A reading room reopened on Monday. Roof repairs cost 40 pounds. Admission remained free. Mr. Vale offered to fund a sign bearing his name. The librarian, Miss Reed, declined."},
+    {"id":"fiction-train","domain":"fiction","contentMode":"fiction","brief":"Write an original fictional scene for adults with narration and dialogue. Invent small actions and conversation within these facts; do not reuse sample plots or characters.","facts":"Mara reached the station at 8:10. The train was delayed by 20 minutes. Her suitcase contained a blue scarf. The ticket clerk offered a seat in the waiting room. Mara accepted and waited there."}
+  ]
+}

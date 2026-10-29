@@ -116,8 +116,8 @@
       <div class="eyebrow">Text provenance &amp; voice · v2.0</div>
     </div>
     <div style="text-align:right;">
-      <div class="tagline">Explain configured style signals. Restore your own voice.</div>
-      <div class="eyebrow" style="margin-top:4px;">Updated: August 2026</div>
+      <div class="tagline">Check AI signals. Write in a sample-derived voice.</div>
+      <div class="eyebrow" style="margin-top:4px;">Updated: October 2026</div>
     </div>
   </header>
 
@@ -125,7 +125,7 @@
     <div class="stack">
       <section class="panel">
         <h2>Specimen intake</h2>
-        <textarea id="input" spellcheck="false" placeholder="Paste your draft. Nothing leaves this page during analysis; every check runs locally in your browser."></textarea>
+        <textarea id="input" spellcheck="false" placeholder="Paste a draft. Run forensics is local. Check with GPTZero sends this text only when you request it."></textarea>
         <div class="bar">
           <span class="count" id="incount">0 words</span>
           <span>
@@ -136,7 +136,7 @@
       </section>
 
       <section class="panel" id="rewritePanel">
-        <h2>Voice restoration</h2>
+        <h2>Write in a selected voice</h2>
         <div class="voice-label">Write as a persona. The persona sets register, rhythm, and spelling; it never invents facts, credentials, or anecdotes.</div>
         <select id="persona" style="width:100%; background:var(--bg); color:var(--ink); border:1px solid var(--line); border-radius:8px; padding:10px 12px; font-family:var(--sans); font-size:14px;">
           <option value="">No persona (neutral, your sample only)</option>
@@ -149,8 +149,13 @@
           <option value="custom">Custom persona...</option>
         </select>
         <input type="text" id="personaCustom" class="hidden" spellcheck="false" placeholder="Describe the author: role, age, region, register. Example: retired teacher, 60, Texas, warm and plain-spoken." style="width:100%; margin-top:8px; background:var(--bg); color:var(--ink); border:1px solid var(--line); border-radius:8px; padding:10px 12px; font-family:var(--sans); font-size:14px;">
-        <div class="voice-label">Optional: paste preferably 300+ words of authentic writing. The rewrite will match measured habits in that sample. If you set both, your sample wins over the persona wherever they conflict.</div>
-        <textarea id="voice" class="small" spellcheck="false" placeholder="A Slack rant, an old blog paragraph, an email. Anything that sounds like you."></textarea>
+        <label class="voice-label" for="voice">Paste preferably 300+ words from your own writing or the author whose voice you want to use. Choose samples in the target genre. Samples guide style, not identity or biography; they take precedence over a persona. When you generate or rewrite, bounded sample excerpts are sent to your selected writing provider.</label>
+        <textarea id="voice" class="small" spellcheck="false" placeholder="Paste representative writing samples. Required for new drafts; optional for rewriting."></textarea>
+        <label class="voice-label" for="voiceFiles">Or load plain-text samples (.txt or .md)</label>
+        <input id="voiceFiles" type="file" multiple accept=".txt,.md,text/plain,text/markdown">
+        <div id="voiceSampleStatus" class="status" aria-live="polite"></div>
+        <label class="voice-label"><input id="detectorRefine" type="checkbox"> Experimental detector-aware refinement</label>
+        <div class="voice-label">Optional: send the draft and one eligible revision to GPTZero, using its key below, plus one extra writing-provider call. Prefer the better vendor human-class result only after fact and voice checks. API charges may apply; no institutional detector outcome is guaranteed.</div>
         <div class="bar">
           <span class="count">Rewrites use your selected provider, then check facts, voice similarity, and style signals. Run long pieces in sections.</span>
           <span>
@@ -171,9 +176,25 @@
           <input type="password" id="apiKey" autocomplete="off" spellcheck="false" placeholder="sk-ant-..." style="width:100%; margin-top:8px; background:var(--bg); color:var(--ink); border:1px solid var(--line); border-radius:8px; padding:10px 12px; font-family:var(--mono); font-size:13px;">
         </div>
         <div class="status" id="rwStatus"></div>
+        <details style="margin-top:16px;">
+          <summary>Generate a new draft from a brief</summary>
+          <label class="voice-label" for="brief">What should the draft say? Include audience, purpose and format.</label>
+          <textarea id="brief" class="small" placeholder="Write an update for our customers about the launch. Use the source facts below."></textarea>
+          <label class="voice-label" for="sourceFacts">Source facts to preserve (optional; separate facts from instructions)</label>
+          <textarea id="sourceFacts" class="small" placeholder="Names, dates, numbers, claims and quotations the draft must preserve."></textarea>
+          <label class="voice-label" for="contentMode">Content mode</label>
+          <select id="contentMode"><option value="factual">Factual — new claims need evidence</option><option value="fiction">Fiction — allow new dialogue and actions; preserve source facts</option></select>
+          <label class="voice-label" for="voicePasses">Voice passes (each uses a provider call)</label>
+          <select id="voicePasses"><option value="1">1 — draft once</option><option value="2">2 — draft and refine voice</option><option value="3">3 — up to two voice refinements</option></select>
+          <div class="bar">
+            <label for="targetWords">Target words <input id="targetWords" type="number" min="50" max="3000" value="400" style="width:90px;"></label>
+            <button class="primary" id="generateBtn" type="button">Generate in selected voice</button>
+          </div>
+          <div class="voice-label">Uses the writing samples and API settings above. Review new claims, missing-information placeholders and voice before using the draft.</div>
+        </details>
         <div id="rwResult" class="hidden">
           <div class="result-head">
-            <strong>Restored draft</strong>
+            <strong id="draftTitle">Restored draft</strong>
             <span class="delta" id="rwDelta"></span>
             <button class="ghost" id="copyBtn" type="button">Copy</button>
             <button class="ghost" id="iterateBtn" type="button">Use as new specimen</button>
@@ -185,6 +206,16 @@
     </div>
 
     <div class="stack">
+      <section class="panel">
+        <h2>AI detection · GPTZero</h2>
+        <div class="voice-label">Check the specimen with GPTZero using your API account. This sends the specimen to GPTZero and may incur API charges. The key stays in this tab's memory.</div>
+        <label for="detectorKey" class="voice-label">GPTZero API key</label>
+        <input id="detectorKey" type="password" autocomplete="off" spellcheck="false" style="width:100%;" placeholder="Your GPTZero API key">
+        <div class="bar"><button id="detectBtn" class="primary" type="button">Check with GPTZero</button></div>
+        <div id="detectStatus" class="status" aria-live="polite">Not checked. Local forensics does not provide an AI probability.</div>
+        <div id="detectionResult"></div>
+        <div class="voice-label">Human, AI-only and mixed are separate vendor probabilities, not percentages of generated words or proof of authorship. Sapienize has not independently validated GPTZero's accuracy. Results guide rewriting only when experimental detector-aware refinement is explicitly enabled.</div>
+      </section>
       <section class="panel">
         <h2>Style heuristic</h2>
         <div id="scoreArea"><div class="empty">Run forensics to get a style result.</div></div>
@@ -215,7 +246,7 @@
   <footer>
     The style heuristic explains configured writing patterns; it is uncalibrated and is not a probability of human authorship.
     Voice similarity, detector observations, semantic integrity, and provenance are separate results.
-    Analysis runs client-side. Rewriting sends text to your selected provider only when you click the button. Invisible characters are document-integrity findings, not watermark evidence.
+    Local forensics runs client-side. Detection sends the specimen to GPTZero on request. Writing sends the draft or brief, source facts and measured voice profile to your selected provider on request. Invisible characters are document-integrity findings, not watermark evidence.
   </footer>
   <div class="eyebrow" style="margin-top:12px;"><a href="https://github.com/tmanish/sapienize" style="color:var(--muted); text-decoration:none;">github.com/tmanish/sapienize</a></div>
 </div>
@@ -233,6 +264,9 @@
   var lastText = "";
   var analysisGeneration = 0;
   var rewriteRequestGeneration = 0;
+  var detectorRequestGeneration = 0;
+  var uploadedVoiceSamples = null;
+  var sampleLoadGeneration = 0;
 
   var SAMPLE = "In today's fast-paced digital landscape, building a personal brand stands as a testament to professional growth. It is important to note that consistency is not just a habit; it is a paradigm shift. Whether you're a designer or a developer, leveraging cutting-edge tools can unlock the potential of your content strategy. Moreover, publishing regularly can streamline your workflow, foster engagement, and elevate your reach. Furthermore, it is crucial to delve into analytics to navigate the complexities of each platform. In conclusion, the transformative power of showing up daily cannot be overstated.";
 
@@ -252,6 +286,11 @@
     lastResult = null;
     lastText = "";
     $("rewriteBtn").disabled = true;
+    $("generateBtn").disabled = false;
+    detectorRequestGeneration += 1;
+    $("detectBtn").disabled = false;
+    $("detectionResult").textContent = "";
+    $("detectStatus").textContent = "Specimen changed. Check with GPTZero to get a new result.";
     $("rwResult").classList.add("hidden");
     if (hadAnalysis) {
       $("rwStatus").textContent = "Specimen changed. Run forensics again before rewriting.";
@@ -266,6 +305,95 @@
     $("input").value = SAMPLE;
     updateCount();
     invalidateAnalysisForChangedInput();
+  });
+
+  function invalidateWritingResult() {
+    rewriteRequestGeneration += 1;
+    $("rwResult").classList.add("hidden");
+    $("rwStatus").textContent = "";
+    $("generateBtn").disabled = false;
+    $("rewriteBtn").disabled = !lastAnalysis;
+  }
+  function updateVoiceSampleStatus() {
+    var words = SapienizeEngine.wordCount($("voice").value);
+    $("voiceSampleStatus").textContent = words + " sample words. " + (words < 300
+      ? "300+ representative words are recommended; shorter samples are less stable."
+      : "Use samples from the same genre as the intended draft.");
+  }
+  $("voice").addEventListener("input", function () {
+    sampleLoadGeneration += 1;
+    uploadedVoiceSamples = null;
+    invalidateWritingResult();
+    updateVoiceSampleStatus();
+  });
+  $("voiceFiles").addEventListener("change", async function () {
+    var generation = ++sampleLoadGeneration;
+    invalidateWritingResult();
+    try {
+      var files = Array.from($("voiceFiles").files || []);
+      if (!files.length) return;
+      var samples = await Promise.all(files.map(function (file) {
+        return new Promise(function (resolve, reject) {
+          var reader = new FileReader();
+          reader.onload = function () { resolve(String(reader.result)); };
+          reader.onerror = function () { reject(new Error("Could not read a sample file")); };
+          reader.readAsText(file);
+        });
+      }));
+      if (generation !== sampleLoadGeneration) return;
+      invalidateWritingResult();
+      uploadedVoiceSamples = samples;
+      $("voice").value = samples.join("\n\n");
+      updateVoiceSampleStatus();
+    } catch (_) {
+      if (generation === sampleLoadGeneration) $("voiceSampleStatus").textContent = "Could not read samples. Use plain-text files or paste the text.";
+    }
+  });
+  ["brief", "sourceFacts", "targetWords", "personaCustom", "apiKey", "modelName"].forEach(function (id) {
+    $(id).addEventListener("input", invalidateWritingResult);
+  });
+  $("persona").addEventListener("change", invalidateWritingResult);
+  $("provider").addEventListener("change", invalidateWritingResult);
+  ["contentMode", "voicePasses", "detectorRefine"].forEach(function (id) { $(id).addEventListener("change", invalidateWritingResult); });
+
+  $("detectorKey").addEventListener("input", function () {
+    if ($("detectorRefine").checked) invalidateWritingResult();
+    detectorRequestGeneration += 1;
+    $("detectBtn").disabled = false;
+    $("detectionResult").textContent = "";
+    $("detectStatus").textContent = "Ready to check with GPTZero.";
+  });
+  $("detectBtn").addEventListener("click", async function () {
+    var text = $("input").value;
+    var key = $("detectorKey").value.trim();
+    if (!text.trim() || !key) {
+      $("detectStatus").textContent = "Paste a specimen and enter a GPTZero API key first.";
+      return;
+    }
+    var request = ++detectorRequestGeneration;
+    $("detectBtn").disabled = true;
+    $("detectionResult").textContent = "";
+    $("detectStatus").textContent = "Checking with GPTZero…";
+    try {
+      var result = await SapienizeCore.detect(text, { detector: "gptzero", apiKey: key, fetch: window.fetch.bind(window) });
+      if (request !== detectorRequestGeneration || text !== $("input").value) return;
+      var observation = result.detectorEstimate.observations[0];
+      var normalized = observation.normalized;
+      var p = normalized.classProbabilities;
+      $("detectionResult").innerHTML = '<div class="metrics">' +
+        metric("Human", (p.human * 100).toFixed(1) + "%", "vendor probability") +
+        metric("AI-only", (p.ai * 100).toFixed(1) + "%", "vendor probability") +
+        metric("Mixed", (p.mixed * 100).toFixed(1) + "%", "vendor probability") + '</div>';
+      $("detectStatus").textContent = "GPTZero verdict: " + normalized.predictedClass + " · model " + observation.version + " · " + observation.date;
+    } catch (error) {
+      if (request !== detectorRequestGeneration) return;
+      $("detectStatus").textContent = error.status === 401 || error.status === 403
+        ? "GPTZero rejected the API key. Check your account and key."
+        : error.status === 429 ? "GPTZero rate limit reached. Retry later."
+        : "Detection unavailable. Check the text length, account and network. If browser access is blocked, use sapienize detect from the CLI.";
+    } finally {
+      if (request === detectorRequestGeneration) $("detectBtn").disabled = false;
+    }
   });
 
   function scoreColor(score) {
@@ -369,6 +497,7 @@
     lastResult = null;
     lastText = "";
     $("rewriteBtn").disabled = true;
+    $("generateBtn").disabled = false;
     $("rwResult").classList.add("hidden");
     $("rwStatus").textContent = "";
     $("rwStatus").className = "status";
@@ -453,6 +582,10 @@
         rows.push('<div class="review-line">' + escapeHtml((difference.severity || "review") + ": " + difference.message) + '</div>');
       });
       if (semanticDifferences.length > 8) rows.push('<div class="review-line">+' + (semanticDifferences.length - 8) + ' additional semantic differences in the structured result.</div>');
+    } else if (semantic && semantic.permittedAdditions && semantic.permittedAdditions.length) {
+      rows.push('<div class="review-line">' + semantic.permittedAdditions.length + ' fictional additions allowed. No protected-source errors were found; review the scene for consistency.</div>');
+    } else if (semantic && semantic.status === "not_applicable") {
+      rows.push('<div class="review-line">' + escapeHtml(semantic.reason) + '</div>');
     } else {
       rows.push('<div class="review-line">No differences were found by the configured semantic checks. This is not proof of equivalence.</div>');
     }
@@ -474,6 +607,27 @@
       });
     }
     $("rwReview").innerHTML = rows.join("");
+  }
+
+  function detectorRefinementOptions() {
+    return $("detectorRefine").checked ? { apiKey: $("detectorKey").value.trim(), maxPasses: 2, fetch: window.fetch.bind(window) } : undefined;
+  }
+
+  function renderDetectorRefinement(result) {
+    var report = result.detectorRefinement;
+    if (!report) return;
+    var row = document.createElement("div");
+    row.className = "review-line";
+    var message = "Detector-aware refinement: " + report.status + ". ";
+    if (report.before && report.after) {
+      function classes(observation) {
+        var p = observation.normalized.classProbabilities;
+        return "human " + (p.human * 100).toFixed(1) + "%, AI-only " + (p.ai * 100).toFixed(1) + "%, mixed " + (p.mixed * 100).toFixed(1) + "%";
+      }
+      message += report.before.detector.name + " " + report.before.detector.version + " (" + report.before.date + "): " + classes(report.before) + " → " + classes(report.after) + ". ";
+    }
+    row.textContent = message + "Experimental vendor measurements, not authorship proof or a guarantee against other detectors.";
+    $("rwReview").appendChild(row);
   }
 
   function incompleteRewriteMessage(result, hasApiKey) {
@@ -511,6 +665,8 @@
       return;
     }
     btn.disabled = true;
+    $("generateBtn").disabled = true;
+    $("rwResult").classList.add("hidden");
     if (provider === "anthropic" && !apiKey && words > 650) {
       setStatus("Rewriting\u2026 Note: keyless mode caps the response, so drafts over ~650 words may come back truncated. Run long pieces in sections, or add a key under API settings.", false);
     } else {
@@ -523,7 +679,8 @@
         apiKey: apiKey,
         model: model,
         fetch: window.fetch.bind(window),
-        voiceSample: voiceSample || null,
+        voiceSamples: uploadedVoiceSamples || voiceSample || null,
+        detectorRefinement: detectorRefinementOptions(),
         persona: personaSpec() || null,
         maxPasses: 3
       });
@@ -535,14 +692,19 @@
       var voiceMatch = result.verification.voiceMatch;
       var voiceSummary = voiceMatch && Number.isFinite(voiceMatch.score) ? " \u00B7 voice " + voiceMatch.score : "";
       $("rwText").textContent = result.text;
+      $("draftTitle").textContent = "Restored draft";
       $("rwDelta").innerHTML = 'style ' + beforeStyle + ' \u2192 <span class="up">' + afterStyle + '</span> \u00B7 semantic ' + semanticStatus + voiceSummary + ' \u00B7 ' + result.passCount + ' pass' + (result.passCount === 1 ? '' : 'es');
       renderRewriteReview(result.verification.semanticIntegrity, voiceMatch, result.verification.documentIntegrity);
+      renderDetectorRefinement(result);
       $("rwResult").classList.remove("hidden");
       if (result.truncated) {
         setStatus(incompleteRewriteMessage(result, Boolean(apiKey)), true);
         if (!apiKey && (result.completionReason === "length" || result.completionReason === "max_tokens")) $("keyRow").classList.remove("hidden");
       } else if (result.status === "review_required") {
-        setStatus("Rewrite needs review: semantic or document-integrity checks need attention. Compare it with the original before using it.", true);
+        var voicePending = result.voiceRefinement && result.voiceRefinement.targetMet === false;
+        setStatus(voicePending && result.verification.status === "pass"
+          ? "Rewrite needs review: voice similarity is " + result.voiceRefinement.selectedScore + ", below the refinement target of " + result.voiceRefinement.targetScore + ". The target is descriptive, not proof of an authentic voice. Check meaning and voice before using it."
+          : "Rewrite needs review: semantic or document-integrity checks need attention. Compare it with the original before using it." + (voicePending ? " Voice similarity also remains below the refinement target." : ""), true);
       } else {
         setStatus("Done in " + result.passCount + " pass" + (result.passCount === 1 ? "" : "es") + ". Facts passed the configured checks; read it aloud for the final voice decision.", false);
       }
@@ -565,7 +727,57 @@
         setStatus("Rewrite failed: " + safeProviderErrorMessage(e, apiKey) + ". The findings list works as a manual edit checklist meanwhile.", true);
       }
     } finally {
-      if (requestGeneration === rewriteRequestGeneration && sourceGeneration === analysisGeneration) btn.disabled = false;
+      if (requestGeneration === rewriteRequestGeneration && sourceGeneration === analysisGeneration) {
+        btn.disabled = false;
+        $("generateBtn").disabled = false;
+      }
+    }
+  });
+
+  $("generateBtn").addEventListener("click", async function () {
+    var brief = $("brief").value.trim();
+    var samples = uploadedVoiceSamples || $("voice").value.trim();
+    if (!brief || !$("voice").value.trim()) { setStatus("Add a brief and writing samples first.", true); return; }
+    var key = $("apiKey").value.trim();
+    var provider = $("provider").value;
+    if (provider !== "anthropic" && !key) {
+      $("keyRow").classList.remove("hidden");
+      setStatus("Add your provider API key in API settings first.", true);
+      return;
+    }
+    var request = ++rewriteRequestGeneration;
+    $("generateBtn").disabled = true;
+    $("rewriteBtn").disabled = true;
+    $("rwResult").classList.add("hidden");
+    setStatus("Generating a draft in the selected voice…", false);
+    try {
+      var result = await SapienizeCore.generate(brief, {
+        voiceSamples: samples, sourceFacts: $("sourceFacts").value,
+        contentMode: $("contentMode").value, maxVoicePasses: Number($("voicePasses").value),
+        detectorRefinement: detectorRefinementOptions(),
+        targetWords: Number($("targetWords").value), persona: personaSpec() || null,
+        provider: provider, apiKey: key,
+        model: $("modelName").value.trim() || PROVIDER_DEFAULTS[provider].model,
+        fetch: window.fetch.bind(window)
+      });
+      if (request !== rewriteRequestGeneration) return;
+      $("draftTitle").textContent = "Generated draft · review required";
+      $("rwText").textContent = result.text;
+      $("rwDelta").textContent = "voice " + result.verification.voiceMatch.score + "/100 descriptive similarity";
+      renderRewriteReview(result.verification.semanticIntegrity, result.verification.voiceMatch, result.verification.documentIntegrity);
+      renderDetectorRefinement(result);
+      $("rwResult").classList.remove("hidden");
+      setStatus(result.incomplete ? incompleteRewriteMessage(result, Boolean(key))
+        : "Draft ready for review. Check claims, placeholders and the intended voice; source checks cannot verify every new statement.", true);
+    } catch (error) {
+      if (request !== rewriteRequestGeneration) return;
+      $("keyRow").classList.remove("hidden");
+      setStatus("Generation failed: " + safeProviderErrorMessage(error, key) + ". Keyless Anthropic requires a Claude artifact.", true);
+    } finally {
+      if (request === rewriteRequestGeneration) {
+        $("generateBtn").disabled = false;
+        $("rewriteBtn").disabled = !lastAnalysis;
+      }
     }
   });
 

@@ -9,4 +9,4 @@ Baseline: v1 at `b39dd51` builds reproducibly and passes all 71 existing asserti
 5. Package the Claude skill as a thin workflow adapter, document a future MCP surface, and rebuild both generated artifacts exclusively from their sources.
 6. Add fixture, unit, browser, CLI, evaluation, Unicode, length, malformed-input, and artifact tests; run the full suite and build after each coherent slice.
 
-Rewrite ranking gates candidates on protected facts and semantic integrity, then considers voice similarity, then the style heuristic. It never considers external detector or watermark results.
+Rewrite ranking gates candidates on protected facts and semantic integrity, then considers voice similarity, then the style heuristic. Default ranking excludes external detector results. Explicit experimental refinement can compare same-version detector observations after semantic and voice-preservation gates; watermark results remain excluded.

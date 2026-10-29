@@ -311,7 +311,10 @@
   function entityOccurrences(text) {
     var masked = maskRanges(text, urlOccurrences(text).concat(quotationOccurrences(text)));
     var candidates = [];
-    var multi = /\b(?:[A-ZÀ-Þ][A-Za-zÀ-ÿ0-9'’.-]*)(?:\s+(?:of|the|and|&|de|van|von|[A-ZÀ-Þ][A-Za-zÀ-ÿ0-9'’.-]*)){1,4}\b/g;
+    // A sentence-ending period must not join two unrelated capitalized words
+    // ("Monday. Rain"). Keep periods only for titles and initials within names.
+    var nameWord = "(?:(?:Dr|Mr|Mrs|Ms|Prof|St|Jr|Sr)\\.|(?:[A-Z]\\.)+|[A-ZÀ-Þ][A-Za-zÀ-ÿ0-9'’-]*)";
+    var multi = new RegExp("\\b" + nameWord + "(?:\\s+(?:of|the|and|&|de|van|von|" + nameWord + ")){1,4}\\b", "g");
     var match;
     while ((match = multi.exec(masked)) !== null) {
       var words = match[0].split(/\s+/);
@@ -448,12 +451,18 @@
     return { removed: removed, added: added };
   }
 
-  function addPrimitiveCheck(checks, differences, name, original, rewrite, severity) {
+  function addPrimitiveCheck(checks, differences, name, original, rewrite, severity, mentionEvidence) {
     var delta = multisetDelta(original, rewrite);
+    var credited = { added: 0, removed: 0 };
+    (mentionEvidence || []).forEach(function (evidence) {
+      var values = delta[evidence.change];
+      var index = values.map(normalizeEntity).indexOf(evidence.entity);
+      if (index !== -1) { values.splice(index, 1); credited[evidence.change]++; }
+    });
     var singularNames = { numbers: "number", urls: "url", dates: "date", quotations: "quotation", named_entities: "named_entity" };
     var singular = singularNames[name] || name.replace(/s$/, "");
     var comparisonCount = Math.max(original.length, rewrite.length);
-    var matchedCount = Math.max(0, original.length - delta.removed.length);
+    var matchedCount = Math.min(comparisonCount, Math.max(0, original.length - delta.removed.length + credited.added));
     checks[name] = {
       status: delta.removed.length || delta.added.length ? "changed" : "match",
       original: extractRaw(original),
@@ -464,6 +473,7 @@
       comparisonCount: comparisonCount,
       preservation: comparisonCount ? matchedCount / comparisonCount : null
     };
+    if (mentionEvidence && mentionEvidence.length) checks[name].equivalentMentions = mentionEvidence;
     delta.removed.forEach(function (value) {
       differences.push({ type: singular, change: "removed", severity: severity, original: value, rewrite: null, message: "Rewrite removed " + singular.replace(/_/g, " ") + ": " + value });
     });
@@ -473,9 +483,89 @@
   }
 
   function splitSentences(text) {
-    var normalized = cleanText(text).replace(/\n{2,}/g, ". ");
+    var normalized = cleanText(text).replace(/\n{2,}/g, ". ")
+      .replace(/\b(?:Mr|Mrs|Ms|Dr|Prof|St|Jr|Sr)\./g, function (s) { return s.replace('.', '\uE000'); });
     var matches = normalized.match(/[^.!?]+(?:[.!?]+(?:["”’']+)?(?=\s|$)|$)/g) || [];
-    return matches.map(function (sentence) { return sentence.trim(); }).filter(Boolean);
+    return matches.map(function (sentence) { return sentence.replace(/\uE000/g, '.').trim(); }).filter(Boolean);
+  }
+
+  function claimUnits(text) {
+    var out = [];
+    splitSentences(text).forEach(function (sentence) {
+      // Split only at punctuation followed by an explicit subject and finite
+      // predicate. Do not detach an aside from "not — under any conditions — safe".
+      var boundary = /;|\u2014|--|,\s*(?:and|but|yet|so)\b/g;
+      var start = 0, match;
+      while ((match = boundary.exec(sentence)) !== null) {
+        var right = sentence.slice(boundary.lastIndex).trim();
+        var left = sentence.slice(start, match.index).trim();
+        if (/\b(?:not|never|no|without|cannot|can't|isn't|wasn't)\s*$/i.test(left) || /^(?:although|unless|because|despite|under|without)\b/i.test(right)) continue;
+        var explicitClause = /^(?:(?:and|but|yet|so)\s+)?(?:[A-Za-zÀ-ÿ]+\.?\s+){1,5}(?:am|is|are|was|were|has|have|had|can|could|may|might|must|will|would|shall|should|do|does|did|[a-z]+ed)\b/i.test(right);
+        if (!explicitClause) continue;
+        if (left) out.push(left);
+        start = boundary.lastIndex;
+      }
+      var rest = sentence.slice(start).trim();
+      if (rest) out.push(rest);
+    });
+    return out;
+  }
+
+  function equivalentEntityMentions(original, rewrite) {
+    var evidence = [];
+    function direction(left, right, change) {
+      var entities = entityOccurrences(left);
+      var unique = Object.create(null);
+      entities.forEach(function (e) { unique[e.normalized] = e; });
+      var units = claimUnits(left);
+      var rightUnits = claimUnits(right);
+      // Track locally established subjects in narrative order. Later people do
+      // not retroactively make earlier references ambiguous. Unknown subjects
+      // invalidate a binding instead of being guessed from gender or a title.
+      var bindings = Object.create(null), predicatesByName = Object.create(null);
+      units.forEach(function (unit, i) {
+        var pronounMatch = unit.match(/^(He|She|They)\b/i);
+        if (!pronounMatch) return;
+        var pronoun = pronounMatch[1].toLowerCase(), previous = units[i - 1] || '';
+        var names = entityOccurrences(previous);
+        if (names.length === 1 && names[0].index === 0) bindings[pronoun] = names[0].normalized;
+        else if (sentenceInitialEntityCandidate(previous) || /\b(?:a|another) (?:man|woman|boy|girl|person|visitor|stranger)\b/i.test(previous)) bindings[pronoun] = null;
+        var name = bindings[pronoun];
+        if (!name || !unique[name]) return;
+        if (!predicatesByName[name]) predicatesByName[name] = Object.create(null);
+        if (!predicatesByName[name][pronoun]) predicatesByName[name][pronoun] = [];
+        predicatesByName[name][pronoun].push(tokenize(unit.replace(new RegExp('^' + pronoun + '\\s+', 'i'), ''), false).join(' '));
+      });
+      Object.keys(predicatesByName).forEach(function (name) {
+       Object.keys(predicatesByName[name]).forEach(function (pronoun) {
+        var sourcePredicates = predicatesByName[name][pronoun].slice();
+        rightUnits.forEach(function (u) {
+          if (!new RegExp('^' + pronoun + '\\b', 'i').test(u)) return;
+          var key = tokenize(u.replace(new RegExp('^' + pronoun + '\\s+', 'i'), ''), false).join(' ');
+          var at = sourcePredicates.indexOf(key);
+          if (at !== -1) sourcePredicates.splice(at, 1);
+        });
+        var existingNamed = units.filter(function (u) {
+          var es = entityOccurrences(u);
+          return es.length && es[0].index === 0 && es[0].normalized === name;
+        }).map(function (u) { return tokenize(u, false).join(' '); });
+        rightUnits.forEach(function (unit) {
+          var occurrences = entityOccurrences(unit);
+          if (!occurrences.length || occurrences[0].index !== 0 || occurrences[0].normalized !== name) return;
+          var existing = existingNamed.indexOf(tokenize(unit, false).join(' '));
+          if (existing !== -1) { existingNamed.splice(existing, 1); return; }
+          var remainder = tokenize(unit.slice(occurrences[0].end), false).join(' ');
+          var index = sourcePredicates.indexOf(remainder);
+          if (index === -1 || !remainder) return;
+          sourcePredicates.splice(index, 1);
+          evidence.push({ entity: name, change: change, originalPronoun: pronoun, counterpart: unit, method: 'established_unambiguous_subject_binding_and_exact_predicate' });
+        });
+       });
+      });
+    }
+    direction(original, rewrite, 'added');
+    direction(rewrite, original, 'removed');
+    return evidence;
   }
 
   function sentenceInitialEntityCandidate(sentence) {
@@ -564,9 +654,38 @@
   }
 
   function claimTokens(sentence, ignorePolarity) {
-    return tokenize(sentence, true).filter(function (token) {
+    return tokenize(normalizeClaimText(sentence), true).filter(function (token) {
       return !ignorePolarity || (!NEGATIONS[token] && !UNCERTAIN[token] && !CERTAIN[token]);
-    }).map(stemToken);
+    }).map(function (token) { return stemToken(token.replace(/['’]s$/, '')); });
+  }
+
+  function supportedClaimAlignment(left, right) {
+    var a = claimTokens(left, true), b = claimTokens(right, true);
+    var common = Object.keys(makeSet(a)).filter(function (t) { return b.indexOf(t) !== -1; });
+    // A shared generic word (e.g. "there") must not connect unrelated clauses.
+    return common.length >= 2 || (common.length === 1 && a.length === 1 && b.length === 1) ||
+      (common.length >= 1 && Boolean(polarContradiction(a, b)));
+  }
+
+  function analyzeEntityRoles(original, rewrite, checks, differences) {
+    function roles(text) {
+      return claimUnits(text).map(function (unit) {
+        var names = entityOccurrences(unit);
+        if (!names.length || names[0].index !== 0) return null;
+        return { name: names[0].normalized, predicate: tokenize(unit.slice(names[0].end), false).join(' '), text: unit };
+      }).filter(Boolean);
+    }
+    var left = roles(original), right = roles(rewrite), changes = [];
+    left.forEach(function (a) {
+      if (!a.predicate || right.some(function (b) { return b.name === a.name && b.predicate === a.predicate; })) return;
+      var counterpart = right.find(function (b) { return b.name !== a.name && b.predicate === a.predicate; });
+      if (counterpart) {
+        changes.push({ original: a.text, rewrite: counterpart.text });
+        differences.push({ type: 'named_entity', change: 'actor_changed', severity: 'error', original: a.text, rewrite: counterpart.text,
+          message: 'An unchanged predicate was reassigned to a different named subject.' });
+      }
+    });
+    checks.entity_roles = { status: changes.length ? 'changed' : 'match', changes: changes, method: 'named_subject_exact_predicate_alignment' };
   }
 
   function uniqueSimilarity(left, right) {
@@ -591,10 +710,11 @@
   }
 
   function claimSentences(text) {
-    return splitSentences(text).filter(function (sentence) {
+    return claimUnits(text).filter(function (sentence) {
       var content = claimTokens(sentence, false);
       var polarityNeutral = claimTokens(sentence, true);
       return Boolean(sentenceHasFact(sentence)) || isShortSubjectPredicateClaim(sentence) ||
+        (/^(?:nothing|something|anything|nobody|somebody|anybody)\b/i.test(sentence) && tokenize(sentence, false).length >= 2) ||
         (tokenize(sentence, false).length >= 3 && polarityNeutral.length >= 2) ||
         (tokenize(sentence, false).length >= 4 && content.length >= 3);
     });
@@ -608,8 +728,17 @@
     return unique.length ? found / unique.length : 1;
   }
 
+  function normalizeClaimText(sentence) {
+    return sentence.replace(/\u2019/g, "'")
+      .replace(/\b(is|was|are|were|do|does|did|has|have|had|could|would|should)n['’]t\b/gi, '$1 not')
+      .replace(/\bnot anything\b/gi, 'not something')
+      .replace(/\bnothing\b/gi, 'not something')
+      .replace(/\bnot anybody\b/gi, 'not somebody')
+      .replace(/\bnobody\b/gi, 'not somebody');
+  }
+
   function negationParity(sentence) {
-    var tokens = tokenize(sentence, false);
+    var tokens = tokenize(normalizeClaimText(sentence), false);
     var count = 0;
     for (var i = 0; i < tokens.length; i++) {
       var nonNegatingParallelism = (tokens[i] === "not" || /n't$/.test(tokens[i])) && (tokens[i + 1] === "only" || tokens[i + 1] === "just");
@@ -672,24 +801,38 @@
 
     var polarityChanges = [];
     var qualifierChanges = [];
-    originalClaims.forEach(function (left) {
+    function inspectPolarity(left, counterparts, reverse) {
       var best = 0;
       var counterpart = null;
-      rewriteClaims.forEach(function (right) {
+      counterparts.forEach(function (right) {
+        if (!supportedClaimAlignment(left, right)) return;
         var similarity = uniqueSimilarity(claimTokens(left, true), claimTokens(right, true));
         if (similarity > best) { best = similarity; counterpart = right; }
       });
       if (!counterpart || best < 0.5) return;
+      var originalText = reverse ? counterpart : left, rewriteText = reverse ? left : counterpart;
       if (negationParity(left) !== negationParity(counterpart)) {
-        polarityChanges.push({ original: left, rewrite: counterpart, similarity: best, reason: "negation" });
+        polarityChanges.push({ original: originalText, rewrite: rewriteText, similarity: best, reason: "negation" });
       } else {
         var polar = polarContradiction(tokenize(left, true), tokenize(counterpart, true));
-        if (polar) polarityChanges.push({ original: left, rewrite: counterpart, similarity: best, reason: "opposing terms: " + polar.join(" / ") });
+        if (polar) polarityChanges.push({ original: originalText, rewrite: rewriteText, similarity: best, reason: "opposing terms: " + polar.join(" / ") });
       }
       var before = modality(left);
       var after = modality(counterpart);
-      if (before !== after && best >= 0.65) qualifierChanges.push({ original: left, rewrite: counterpart, similarity: best, before: before, after: after });
-    });
+      if (before !== after && best >= 0.65) qualifierChanges.push({ original: originalText, rewrite: rewriteText, similarity: best, before: reverse ? after : before, after: reverse ? before : after });
+    }
+    originalClaims.forEach(function (left) { inspectPolarity(left, rewriteClaims, false); });
+    rewriteClaims.forEach(function (right) { inspectPolarity(right, originalClaims, true); });
+    function deduplicateChanges(values) {
+      var seen = Object.create(null);
+      return values.filter(function (value) {
+        var key = JSON.stringify(value);
+        if (seen[key]) return false;
+        seen[key] = true; return true;
+      });
+    }
+    polarityChanges = deduplicateChanges(polarityChanges);
+    qualifierChanges = deduplicateChanges(qualifierChanges);
 
     polarityChanges.forEach(function (change) {
       differences.push({ type: "claim_polarity", change: "changed", severity: "error", original: change.original, rewrite: change.rewrite, similarity: change.similarity, message: "A closely matched claim changed polarity (" + change.reason + ")." });
@@ -763,7 +906,7 @@
     addPrimitiveCheck(checks, differences, "urls", originalUrls, exactMatch ? originalUrls : urlOccurrences(rewrite), "error");
     addPrimitiveCheck(checks, differences, "dates", originalDates, exactMatch ? originalDates : dateOccurrences(rewrite), "error");
     addPrimitiveCheck(checks, differences, "quotations", originalQuotations, exactMatch ? originalQuotations : quotationOccurrences(rewrite), "error");
-    addPrimitiveCheck(checks, differences, "named_entities", originalEntities, exactMatch ? originalEntities : entityOccurrences(rewrite), "error");
+    addPrimitiveCheck(checks, differences, "named_entities", originalEntities, exactMatch ? originalEntities : entityOccurrences(rewrite), "error", exactMatch ? [] : equivalentEntityMentions(original, rewrite));
 
     var lexical = lexicalSimilarity(original, rewrite);
     var failThreshold = typeof options.lexicalFailThreshold === "number" ? options.lexicalFailThreshold : 0.25;
@@ -801,6 +944,7 @@
       };
     } else {
       analyzeSentenceInitialEntities(original, rewrite, checks, differences);
+      analyzeEntityRoles(original, rewrite, checks, differences);
       analyzeClaims(original, rewrite, checks, differences);
     }
 
@@ -849,7 +993,96 @@
     };
   }
 
+  // Generation expands source facts; it is not a lossless rewrite of them.
+  // Fiction permission is explicit and never relaxes source-anchor preservation.
+  function verifyGeneration(sourceFacts, draft, options) {
+    options = options || {};
+    var mode = options.contentMode || "factual";
+    if (mode !== "factual" && mode !== "fiction") throw new TypeError("contentMode must be factual or fiction");
+    if (typeof sourceFacts !== "string" || typeof draft !== "string") return invalidResult(sourceFacts, draft);
+    var base = verifySemanticIntegrity(sourceFacts, draft, { lexicalFailThreshold: 0, lexicalReviewThreshold: 0 });
+    var differences = [];
+    var additions = [];
+    var extractors = { number: numberOccurrences, url: urlOccurrences, date: dateOccurrences, quotation: quotationOccurrences, named_entity: entityOccurrences };
+    var primitiveKeys = { number: "numbers", url: "urls", date: "dates", quotation: "quotations", named_entity: "named_entities" };
+    var checks = {};
+    var total = 0, matched = 0;
+    Object.keys(extractors).forEach(function (type) {
+      var original = extractors[type](sourceFacts);
+      var observed = extractors[type](draft);
+      var unique = Object.create(null);
+      var found = Object.create(null);
+      observed.forEach(function (item) { found[item.normalized] = true; });
+      var removed = [];
+      original.forEach(function (item) {
+        if (unique[item.normalized]) return;
+        unique[item.normalized] = true;
+        total++;
+        // Names can move into dialogue or sentence-initial positions.
+        var inDraft = found[item.normalized];
+        if (type === "named_entity") {
+          var escaped = normalizeEntity(item.raw).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+          inDraft = new RegExp("(?:^|[^a-zà-ÿ0-9])" + escaped + "(?=$|[^a-zà-ÿ0-9])", "i").test(normalizeEntity(draft));
+        }
+        if (inDraft) matched++;
+        else {
+          removed.push(item.raw);
+          differences.push({ type: type, change: "removed", severity: "error", original: item.raw, rewrite: null, message: "Draft did not preserve source " + type.replace(/_/g, " ") + ": " + item.raw });
+        }
+      });
+      var added = [];
+      observed.forEach(function (item) {
+        if (unique[item.normalized] || added.indexOf(item.raw) !== -1) return;
+        added.push(item.raw);
+        var permitted = mode === "fiction" && type !== "url" && type !== "date";
+        var difference = { type: type, change: "added", severity: permitted ? "info" : "warning", original: null, rewrite: item.raw,
+          message: (permitted ? "Fictional addition allowed; review consistency: " : "New content requires factual review: ") + item.raw };
+        if (permitted) additions.push(difference); else differences.push(difference);
+      });
+      checks[primitiveKeys[type]] = { status: removed.length ? "changed" : "match", removed: removed, added: added, method: "source-anchor inclusion; repetition is allowed" };
+    });
+    // Keep claim omissions, polarity and qualification findings, but do not
+    // demand lexical equivalence between a short brief and a longer scene.
+    base.differences.forEach(function (difference) {
+      if (difference.type === "named_entity" && ["possible_substitution", "actor_changed"].indexOf(difference.change) !== -1) {
+        differences.push(Object.assign({}, difference, { severity: "error" }));
+        return;
+      }
+      if (["claim", "claim_polarity", "claim_qualifier", "input", "semantic_signal"].indexOf(difference.type) === -1) return;
+      if (difference.type === "claim" && difference.change === "added" && mode === "fiction") additions.push(Object.assign({}, difference, { severity: "info", message: "Fictional elaboration allowed; review consistency with the source facts." }));
+      else differences.push(difference);
+    });
+    // Look for conflicting near-matches even if a correct version also appears.
+    claimSentences(sourceFacts).forEach(function (source) {
+      claimSentences(draft).forEach(function (candidate) {
+        if (uniqueSimilarity(claimTokens(source, true), claimTokens(candidate, true)) < 0.65) return;
+        var pair = verifySemanticIntegrity(source, candidate, { lexicalFailThreshold: 0, lexicalReviewThreshold: 0 });
+        pair.differences.forEach(function (difference) {
+          if (difference.type === "claim_polarity" ||
+              (difference.change === "removed" && ["number", "date", "url"].indexOf(difference.type) !== -1)) {
+            differences.push(Object.assign({}, difference, { type: "source_conflict", original: source, rewrite: candidate, message: "A closely matching passage may contradict a source fact: " + difference.message }));
+          }
+        });
+      });
+    });
+    var errors = differences.filter(function (d) { return d.severity === "error"; }).length;
+    var warnings = differences.filter(function (d) { return d.severity === "warning"; }).length;
+    var status = errors ? "fail" : (warnings || additions.length ? "review" : "pass");
+    return {
+      kind: "semantic_integrity", method: "generation-source-preservation", schemaVersion: 1, contentMode: mode,
+      status: status, accepted: false, requiresReview: true,
+      score: total ? Math.round(matched / total * 100) : null,
+      scoreKind: "source_anchor_coverage", calibrated: false, isProbability: false,
+      scoreInterpretation: "Coverage of extracted source anchors, not factual correctness or semantic equivalence.",
+      criticalDifferenceCount: errors, differences: differences, permittedAdditions: additions,
+      checks: Object.assign(checks, { claims: base.checks.claims }),
+      summary: { errors: errors, warnings: warnings, differences: differences.length, permittedAdditions: additions.length },
+      limitations: ["Source checks are heuristic: review omissions, attribution and contradictions even when anchors are present.", "Explicit fiction permission allows new dialogue, characters and actions, but never changes supplied source facts or quotations.", "Generation always requires human review; no semantic-equivalence score is inferred from length expansion."]
+    };
+  }
+
   return {
+    verifyGeneration: verifyGeneration,
     verifySemanticIntegrity: verifySemanticIntegrity,
     compareSemanticIntegrity: verifySemanticIntegrity,
     extractNumbers: extractNumbers,

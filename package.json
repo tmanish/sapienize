@@ -10,6 +10,7 @@
     "build": "python3 build.py",
     "test": "bash tests/run_all.sh",
     "eval": "node src/cli/sapienize.js eval",
+    "study": "node eval/study/run.js",
     "sapienize": "node src/cli/sapienize.js"
   },
   "engines": {

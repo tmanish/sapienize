@@ -1,0 +1,58 @@
+{
+  "schemaVersion": 1,
+  "id": "independent-effectiveness-smoke-v1",
+  "seed": 20261029,
+  "repeats": 1,
+  "lengths": [
+    350
+  ],
+  "models": [
+    {
+      "id": "openai",
+      "provider": "openai",
+      "modelEnv": "STUDY_OPENAI_MODEL",
+      "keyEnv": "OPENAI_API_KEY"
+    },
+    {
+      "id": "claude",
+      "provider": "anthropic",
+      "modelEnv": "STUDY_ANTHROPIC_MODEL",
+      "keyEnv": "ANTHROPIC_API_KEY"
+    },
+    {
+      "id": "third-family",
+      "provider": "openrouter",
+      "modelEnv": "STUDY_OPENROUTER_MODEL",
+      "keyEnv": "OPENROUTER_API_KEY"
+    }
+  ],
+  "feedbackDetector": "gptzero",
+  "judges": [
+    "gptzero",
+    "copyleaks",
+    "originality"
+  ],
+  "heldoutJudges": [
+    "copyleaks",
+    "originality"
+  ],
+  "thresholds": {
+    "gptzero": 0.5,
+    "copyleaks": 0.05,
+    "originality": 0.05
+  },
+  "originalityModel": "model-5.0",
+  "humanDataset": "eval/.local/effectiveness/human.jsonl",
+  "humanManifest": "eval/.local/effectiveness/human.manifest.json",
+  "referenceSplit": "voice_reference",
+  "controlSplit": "human_control",
+  "cases": [
+    {
+      "id": "work-library",
+      "domain": "historical_prose",
+      "contentMode": "factual",
+      "brief": "Write a clear update for local library users. Use only the source facts; do not invent quotations or background.",
+      "facts": "The library will reopen on 12 November 2026. Opening hours will be 9 a.m. to 6 p.m. Membership remains free. Roof repairs cost 24000 pounds. The reading room will remain closed until 19 November 2026."
+    }
+  ]
+}

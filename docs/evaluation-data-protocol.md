@@ -7,7 +7,7 @@ The protocol serves two separate evaluation goals:
 1. measure detector behavior as a versioned external observation; and
 2. measure whether voice-restored text preserves the source while moving toward an authentic `VoiceProfile`.
 
-Detector observations, provenance results, and watermark results must not enter rewrite prompts, candidate ranking, convergence criteria, or candidate selection. Evaluation measures product behavior; it is not a detector-evasion objective.
+Frozen evaluation observations must never be used to tune the evaluated candidates or leak held-out labels. Opt-in detector-aware refinement uses separate runtime measurements and must be reported as an intervention, with independent held-out evaluation. Provenance and watermark results never guide rewriting.
 
 ## Dataset manifest and rights
 
@@ -74,6 +74,35 @@ At minimum, split validation must enforce these rules:
 Author-held-out and model-held-out questions may require separate named split protocols. Each protocol must publish its grouping keys and frozen assignments. Voice-profile reference samples may be from the same evaluation author, but they must be distinct from the target document and its derivatives; that author must remain absent from training and development partitions in an author-held-out evaluation.
 
 Thresholds, calibration artifacts, feature selection, and prompt or rule changes must be fitted on training or development data only. Final evaluation data must not be used to select a threshold, tune a detector, choose a rewrite, or decide which results to publish. Revising a frozen assignment creates a new dataset version.
+
+### Implemented evaluation and audit workflow
+
+```bash
+npm run sapienize -- audit dataset.jsonl --manifest dataset.manifest.json --output audit.json
+npm run eval -- dataset.jsonl --manifest dataset.manifest.json --split evaluation --observations observations.json --seed pilot-1 --output report.json
+```
+
+The evaluator APIs accept `{ manifest, split, observations, analyzer, seed, threshold }`. Pass the **full dataset** and an explicit split name. Both synchronous and asynchronous entry points validate the full manifest binding, exactly-once assignments, group separation, and duplicate leakage before any analyzer runs. Supplying a prefiltered dataset against the full manifest fails fingerprint validation. The split is selected by membership and evaluated in ascending record-ID order; the seed is passed to analyzers and never changes assignments. Unknown splits and observation IDs fail. Full-dataset observation files are supported: observations outside the requested split are excluded, their IDs recorded, and their measurements never enter metrics.
+
+Manifest-free evaluation accepts only explicitly synthetic records (`metadata.synthetic: true`). A manifest with unknown consent or an unresolved license identifier is valid for preparation but cannot be evaluated. Synthetic consent must agree with the record metadata. These checks validate declarations; they do not independently establish legal rights or the authenticity of a sample.
+
+`eval/duplicates.js` implements audit policy version 1: NFKC normalization, lowercase Unicode letter/mark/number tokens, normalized exact matching, and Jaccard similarity over sets of consecutive three-word shingles. Similarity at or above 0.8 is a near-duplicate match. The policy is fixed and recorded in every report. Texts below eight tokens receive normalized exact matching only. Punctuation-only strings retain their punctuation when compared. The inverted index avoids comparisons for pairs without shared shingles, but repetitive corpora and large match sets can still require quadratic work and output.
+
+`auditDatasetManifest(manifest, records)` returns duplicate evidence even when it crosses splits; malformed manifests, binding errors, and group leakage still throw. `validateDatasetManifest`, `selectDatasetSplit`, and both evaluator entry points reject cross-split duplicate matches. The CLI `audit` command writes the audit then exits 1 for cross-split duplicates, 4 for other matches needing review, or 0 for no matches. Invalid inputs exit 1 without an audit. Without a manifest, `audit` can inspect a draft corpus but cannot certify split separation. Same-split matches never remove or merge records automatically. Resolve duplicate leakage by grouping/removing related material through a reviewed dataset-version change, then update the fingerprint and frozen assignments.
+
+The audit reports pseudonymous record IDs, similarity, split names, match counts, short-record coverage, policy and dataset fingerprint; it does not emit source text. A pass is limited to this lexical policy. It can miss paraphrases, partial excerpts and languages without word boundaries, and can match boilerplate. Supplement it with domain-appropriate manual checks and source/lineage grouping before making benchmark claims.
+
+Evaluation report schema version 1 retains its existing fields and adds:
+
+- `evaluatorVersion`: the implementation version;
+- `governance.status`: `synthetic_only`, `validated_synthetic`, or `validated` (declaration/structure status, not a performance certification);
+- `governance.fullDataset`: record count and SHA-256 fingerprint before filtering;
+- `governance.manifest`: dataset ID/version, manifest schema version and SHA-256 manifest fingerprint, or null for synthetic-only runs;
+- `governance.split`: name, purpose, sorted record IDs and frozen policy, or null;
+- `governance.duplicateAudit` and `governance.excludedObservationIds`;
+- `metrics.perSourceType`, `perLanguage`, `perAuthor`, and `perModelVersion`, alongside existing domain/model/length slices. Provider/model/version keys are JSON-encoded triples to avoid collisions.
+
+`dataset.recordCount` and `dataset.fingerprint` continue to describe only the evaluated subset. Manifest metadata supplies missing domain/model values and language/author/version slices. The audit and whole-dataset identities cover every partition. Reports contain no copied manifest source descriptions, consent records, or filesystem paths. Existing raw detector observations may echo private text and retain the private-local handling requirements below. No timestamps are injected, so identical inputs/configuration produce identical reports when the supplied analyzer is deterministic.
 
 ## Benchmark coverage
 

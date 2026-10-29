@@ -39,6 +39,19 @@ test("reordering preserves numbers, URLs, dates, quotations, and named entities"
   ["numbers", "urls", "dates", "quotations", "named_entities"].forEach(name => assert.strictEqual(result.checks[name].status, "match", name));
 });
 
+test("entity names do not span full stops but retain titles and initials", () => {
+  const original = "The reading room reopened on Monday. Rain had damaged the roof. Repairs cost 40 pounds. Admission remained free. Mr. Vale offered to pay for a new sign if his name appeared on it. The librarian, Miss Reed, declined his offer.";
+  const rewrite = "The reading room reopened on Monday; rain had damaged the roof, and repairs had cost 40 pounds. Admission remained free. Mr. Vale offered to pay for a new sign, provided that his name appeared upon it; but the librarian, Miss Reed, declined his offer.";
+  const result = semantic.verifySemanticIntegrity(original, rewrite);
+  assert.strictEqual(result.status, "pass", JSON.stringify(result.differences));
+  assert.deepStrictEqual(semantic.extractNamedEntities(original), ["Monday", "Mr. Vale", "Miss Reed"]);
+  for (const name of ["Mr. Vale", "Dr. Jane Smith", "J. R. R. Tolkien", "U.S. Senate", "St. Louis"]) {
+    assert(semantic.extractNamedEntities("We spoke with " + name + " today.").includes(name), name);
+  }
+  assert.strictEqual(semantic.verifySemanticIntegrity(original, rewrite.replace("40", "400")).status, "fail");
+  assert.strictEqual(semantic.verifySemanticIntegrity(original, rewrite.replace("Mr. Vale", "Mr. Dale")).status, "fail");
+});
+
 test("material fact changes produce typed critical differences", () => {
   const original = "On August 17, 2026, Acme Labs enrolled 120 patients. Read https://example.org/trial. Dr. Rivera said, “The trial met its goal.”";
   const rewrite = "On August 18, 2026, Beta Works enrolled 125 patients. Read https://example.org/other. Dr. Rivera said, “The trial missed its goal.”";

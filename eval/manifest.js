@@ -17,6 +17,7 @@ const {
   validateRecords
 } = require("./schema.js");
 const { datasetFingerprint } = require("./dataset.js");
+const { auditDuplicates } = require("./duplicates.js");
 
 const DATASET_MANIFEST_SCHEMA_VERSION = 1;
 const CONSENT_STATUSES = Object.freeze([
@@ -452,27 +453,33 @@ function validateDatasetBinding(manifest, records, context) {
 
   const splitForRecord = new Map();
   manifest.splits.forEach(split => split.record_ids.forEach(id => splitForRecord.set(id, split.name)));
-  const firstByNormalizedText = new Map();
-  for (const record of records) {
-    const normalizedText = record.text.normalize("NFC").replace(/\s+/gu, " ").trim();
-    const first = firstByNormalizedText.get(normalizedText);
-    const split = splitForRecord.get(record.id);
-    if (first && first.split !== split) {
-      fail(
-        "exact normalized duplicate text for `" + first.id + "` and `" + record.id +
-          "` crosses frozen splits `" + first.split + "` and `" + split + "`",
-        context
-      );
-    }
-    if (!first) firstByNormalizedText.set(normalizedText, { id: record.id, split });
-  }
+  return auditDuplicates(records, splitForRecord);
+}
+
+// Audits return duplicate evidence for repair without accepting a leaking split.
+// Structural, rights, identity, and group-leakage errors still throw.
+function auditDatasetManifest(manifest, records, context) {
+  validateStructure(manifest, context || {});
+  return validateDatasetBinding(manifest, records, context || {});
 }
 
 function validateDatasetManifest(manifest, records, context) {
   const details = context || {};
   validateStructure(manifest, details);
-  if (records !== undefined) validateDatasetBinding(manifest, records, details);
+  if (records !== undefined) {
+    const audit = validateDatasetBinding(manifest, records, details);
+    assertNoDuplicateLeakage(audit, details);
+  }
   return manifest;
+}
+
+function assertNoDuplicateLeakage(audit, context) {
+  const pair = audit.pairs.find(item => item.crossesSplits);
+  if (pair) {
+    const label = pair.kind === "normalized_exact" ? "exact normalized duplicate text" : "near-duplicate text";
+    fail(label + " for `" + pair.recordIds[0] + "` and `" + pair.recordIds[1] +
+      "` crosses frozen splits `" + pair.splits[0] + "` and `" + pair.splits[1] + "`", context || {});
+  }
 }
 
 function parseDatasetManifest(input, options) {
@@ -531,6 +538,8 @@ module.exports = {
   LEAKAGE_GROUP_KEYS,
   DatasetManifestValidationError,
   validateDatasetManifest,
+  auditDatasetManifest,
+  assertNoDuplicateLeakage,
   validateManifest: validateDatasetManifest,
   parseDatasetManifest,
   loadDatasetManifest,

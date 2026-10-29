@@ -123,18 +123,24 @@ function pause(milliseconds) {
   document.getElementById("input").value = "Acme shipped 12 units on 4 July 2026.";
   document.getElementById("analyzeBtn").dispatchEvent(new window.Event("click"));
   let resolveDelayedFetch;
-  window.fetch = () => new Promise(resolve => { resolveDelayedFetch = resolve; });
+  const delayedResponse = {
+    ok: true,
+    json: () => Promise.resolve({
+      choices: [{ finish_reason: "stop", message: { content: "Acme shipped 12 units on 4 July 2026." } }]
+    })
+  };
+  let firstDelayedCall = true;
+  window.fetch = () => {
+    if (!firstDelayedCall) return Promise.resolve(delayedResponse);
+    firstDelayedCall = false;
+    return new Promise(resolve => { resolveDelayedFetch = resolve; });
+  };
   document.getElementById("rewriteBtn").dispatchEvent(new window.Event("click"));
   await pause(0);
   assert.strictEqual(typeof resolveDelayedFetch, "function");
   document.getElementById("input").value = "Beta shipped 99 units on 5 July 2026.";
   document.getElementById("analyzeBtn").dispatchEvent(new window.Event("click"));
-  resolveDelayedFetch({
-    ok: true,
-    json: () => Promise.resolve({
-      choices: [{ finish_reason: "stop", message: { content: "Acme shipped 12 units on 4 July 2026." } }]
-    })
-  });
+  resolveDelayedFetch(delayedResponse);
   await pause(100);
   assert.strictEqual(document.getElementById("rwResult").classList.contains("hidden"), true);
   assert.doesNotMatch(document.getElementById("rwStatus").textContent, /Done in/);

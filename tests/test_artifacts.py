@@ -1,13 +1,14 @@
 #!/usr/bin/env python3
 """Check committed artifact parity, then rebuild to prove reproducibility."""
 import hashlib
+import json
 import pathlib
 import subprocess
 import sys
 import zipfile
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
-TEXT_SUFFIXES = {".html", ".js", ".json", ".md", ".txt", ".yaml", ".yml"}
+TEXT_SUFFIXES = {".html", ".js", ".cjs", ".json", ".md", ".txt", ".yaml", ".yml"}
 
 
 def digest(path):
@@ -30,13 +31,18 @@ assert "Uncalibrated style heuristic" in html, "standalone UI still exposes ambi
 
 with zipfile.ZipFile(ROOT / "sapienize.skill") as archive:
     names = sorted(archive.namelist())
-    expected = ["sapienize/SKILL.md", "sapienize/references/tells.md"]
-    assert names == expected, f"unexpected skill members: {names}"
+    sources = {"sapienize/SKILL.md": ROOT / "skill/sapienize/SKILL.md"}
+    for pattern in ("references/*.md", "scripts/*.cjs"):
+        for source in (ROOT / "skill/sapienize").glob(pattern):
+            sources["sapienize/" + source.relative_to(ROOT / "skill/sapienize").as_posix()] = source
+    for relative in json.loads((ROOT / "skill/runtime-files.json").read_text())["files"]:
+        sources["sapienize/runtime/" + relative] = ROOT / relative
+    assert names == sorted(sources), f"unexpected skill members: {names}"
     for name in names:
         info = archive.getinfo(name)
         assert info.create_system == 3, f"{name} has platform-dependent ZIP creator metadata"
         assert info.compress_type == zipfile.ZIP_STORED, f"{name} uses platform-dependent compression"
-        source = ROOT / "skill" / name
+        source = sources[name]
         member = archive.read(name)
         assert member == reproducible_bytes(source), f"{name} differs from its authoritative source"
         if source.suffix.lower() in TEXT_SUFFIXES:

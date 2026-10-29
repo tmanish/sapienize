@@ -1,15 +1,15 @@
 # Sapienize product path and status
 
-Last updated: 2026-08-18
+Last updated: 2026-10-29
 
 This is the durable product-direction log for Sapienize. Update it when a milestone changes status, a measurement claim becomes supportable, or a host adapter ships. It records product intent separately from current capability.
 
 ## North star
 
-Sapienize helps people restore their human voice in assisted writing. Its primary product outcome is a faithful rewrite that:
+Sapienize's two core capabilities are meaningful AI-text detection with explicit score semantics, and generating or rewriting content in a selected voice from representative samples. Detection reports the configured vendor's observation and limitations. Writing produces a draft that:
 
 1. preserves meaning, facts, claims, names, numbers, dates, URLs, quotations, negation, uncertainty, and scope;
-2. matches measurable habits from the user's authentic writing when a representative sample is available;
+2. matches measurable habits from the user's or another selected author's representative writing samples;
 3. otherwise follows a requested persona only for register and diction, without inventing identity, biography, credentials, anecdotes, facts, opinions, or first-person experience; and
 4. reduces generic or model-associated stylistic patterns only where doing so does not conflict with semantic preservation or the authentic voice.
 
@@ -20,7 +20,7 @@ The product ambition is robust performance as models, domains, and detectors cha
 Detectors and provenance are independent measurement surfaces, not rewrite objectives.
 
 - External detector results may be recorded and compared during evaluation, with detector name, version when known, date, raw response, score semantics, threshold, calibration status, and limitations preserved.
-- Detector or provenance results do not enter rewrite prompts, convergence criteria, candidate eligibility, or ranking.
+- Default writing excludes detector results. Explicit detector-aware refinement uses validated vendor feedback after semantic and voice-preservation gates. Provenance never guides writing.
 - A style heuristic is an explainable, uncalibrated inventory of configured signals; it is not a probability or substitute for a trained detector.
 - Voice similarity is descriptive and semantic verification is heuristic. Neither establishes identity or guarantees perfect preservation.
 - Missing or unsupported provenance evidence means unknown, not absent.
@@ -39,27 +39,27 @@ Current reference: [Anthropic, “How Claude marks AI-generated content”](http
 
 | Area | Current capability | Status boundary |
 |---|---|---|
-| Browser | Downloadable single-file analysis app; explicit rewrites through Anthropic, OpenAI, or OpenRouter | Local analysis is available; rewrite behavior depends on the selected provider |
-| Core API | Provider-neutral analysis, voice profiling/comparison, rewrite, verification, and provenance entry points | Existing schemas remain versioned and detector/provenance results remain separate |
+| Browser | Downloadable local forensics app; GPTZero detection; sample uploads; brief-based generation and rewrites through Anthropic, OpenAI, or OpenRouter | Detection/writing require configured accounts or compatible Claude artifact access; direct detector browser access is not live-tested |
+| Core API | Analysis, detect, voice profiling/comparison, generate, rewrite, verification and provenance | Existing schemas remain versioned; default writing remains independent of detection; optional refinement is explicit |
 | Voice restoration | Authentic-sample profiles, optional persona guidance, component comparisons, and semantic-first candidate ranking | Descriptive/heuristic; no identity claim and no benchmark-backed quality claim yet |
 | Semantic verification | Checks protected numbers, dates, URLs, quotations, likely names, lexical similarity, and obvious claim changes | Conservative and heuristic; important output still requires human review |
 | Local detector | Contract exists | `unavailable`; no trained, evaluated model ships |
-| External detectors | Versioned observation contract, mock adapter, and evaluation hooks | No live or paid detector integration ships |
+| External detectors | GPTZero v2 adapter with human/AI-only/mixed probabilities, raw result, timestamp and model version | Mock-tested against documented API; requires a user API key; no independent accuracy/calibration claim |
 | Provenance | Document-integrity inspection and an official-verifier boundary | Claude text verification is `unsupported` without an official configured verifier; no watermark-free certification |
-| CLI | Scan, profile, rewrite, verify, provenance, and evaluation workflows | Rewrites require an explicitly selected provider and credential where applicable |
+| CLI | Scan, detect, profile, generate, rewrite, verify, provenance, audit and evaluation | `--samples` or `--voice` supports writing; generation requires review even when completed |
 | Skills | Generated Claude-oriented `.skill` package | ChatGPT/Codex and Gemini packages do not ship yet |
-| Evaluation data | Versioned governance manifest validator, synthetic fixture manifest, exact dataset binding, rights metadata, lineage, and frozen split leakage checks | Protocol foundation is available; no representative benchmark or product-performance evidence exists yet |
+| Evaluation data | Governance manifests integrated into CLI/API evaluation, explicit frozen splits, full/subset/manifest fingerprints, lexical duplicate audits, and metadata slices | Workflow is available; no representative benchmark or product-performance evidence exists yet |
 | MCP | Interface proposal is documented | No MCP server ships yet |
 
 ## Product-aligned next path
 
-The right next move is data, not more heuristic rules. Work proceeds in this order.
+User-facing detection and sample-guided writing are the product priority. The evaluation workflow supports measuring them; representative data and live account validation remain necessary before performance claims.
 
 ### 1. Create the evaluation-data protocol
 
 Add dataset manifests covering licensing, consent, collection method, edit history, domain, model/version, and leakage-safe train/evaluation splits.
 
-Status: **foundation implemented on 2026-08-18.** `eval/manifest.js` now validates a separately versioned governance manifest, exact dataset binding, source rights, privacy handling, ordered lineage, frozen split membership, grouping leakage, and normalized exact-duplicate leakage. The committed manifest remains synthetic plumbing. Near-duplicate audit tooling and integration of manifest identity into evaluator reports remain work for the representative-benchmark phase.
+Status: **foundation implemented on 2026-08-18; evaluation integration completed on 2026-10-29.** `eval/manifest.js` validates a separately versioned governance manifest, exact dataset binding, source rights, privacy handling, ordered lineage, frozen split membership, grouping leakage, and normalized exact/lexical near-duplicate leakage. Both evaluator APIs and the CLI validate the full dataset before selecting an explicit split, retain full/subset/manifest fingerprints, and expose the duplicate audit. `sapienize audit` supports local review before evaluation. The committed manifest remains synthetic plumbing; lexical checks do not establish absence of all leakage.
 
 Exit criteria:
 
@@ -82,7 +82,9 @@ Exit criteria:
 
 ### 3. Integrate one legitimate external detector
 
-Use it strictly as a versioned evaluation observation. Preserve its raw response, score semantics, threshold, calibration status, and date; never feed it into rewrite ranking.
+Use it strictly as a versioned evaluation observation. Preserve its raw response, score semantics, threshold, calibration status, and date. Only explicitly requested detector-aware refinement may use same-version measurements after the fidelity and voice gates.
+
+Status: **GPTZero adapter and user-facing detection implemented on 2026-10-29**, with deterministic API/CLI/browser mocks. Live-account compatibility and independent representative evaluation remain unverified. No credentials or live responses were used in implementation.
 
 Exit criteria:
 
@@ -138,6 +140,22 @@ Planned sequence:
 The universal product concept is `/sapienize`; the literal command, package layout, availability, and permission model may differ by host. Until those adapters ship, documentation must say that the current generated `.skill` is Claude-oriented and that the CLI is the reusable cross-provider surface.
 
 ## Status log
+
+### 2026-10-29 — Detection and sample-guided writing surfaces implemented
+
+- Added a GPTZero detector factory/adapter and `detect` core/CLI/browser operation; human, AI-only and mixed probabilities stay distinct, with mixed binary abstention.
+- Added `generate` from a brief, sample-derived profile, optional source facts and target length. Drafts always require factual/voice review; missing source facts are explicitly unverified.
+- Added direct `--samples` support to rewriting/generation and browser text-file uploads; credentials remain separate and in memory/environment variables.
+- Extended the Claude skill for detection and brief-based generation, validated its frontmatter and packaged references, and retained host/network limitations.
+- Tested malformed detector responses, failures, credential redaction, changed facts, provider truncation/refusal and stale browser responses. No detector-evasion or institutional-outcome claim is made.
+
+### 2026-10-29 — Governed evaluation workflow integrated
+
+- Added explicit manifest/split options to evaluation, with validation before analyzer execution and manifest-free runs restricted to declared synthetic fixtures.
+- Recorded full dataset, manifest and selected subset identities, frozen assignments, evaluator version and seed; excluded known out-of-split observations without pooling metrics.
+- Added a deterministic, versioned lexical near-duplicate audit with reviewable ID-only pairs; cross-split matches block evaluation and same-split matches remain visible.
+- Added source-type, language, author and provider/model/version slices with existing unavailable-metric behavior.
+- Documented lexical audit limits and retained representative data collection, manual leakage review, uncertainty estimates, and paired author-reviewed quality evaluation as benchmark work.
 
 ### 2026-08-18 — Data-first product path adopted
 

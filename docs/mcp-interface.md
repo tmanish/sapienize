@@ -9,9 +9,9 @@ This document maps the provider-neutral Sapienize core to a future Model Context
 - Keep stylistic signals, the uncalibrated style heuristic, detector observations, voice similarity, semantic integrity, provenance, and document integrity distinct in every response.
 - Local scan/profile/compare/verify operations must not make network requests.
 - Rewriting may call only the provider explicitly selected by the client. Credentials come from server configuration or a credential reference, never a tool argument that could be logged.
-- Official provenance verification and external detector observations may use configured integrations, but their raw and normalized results remain measurement-only.
-- Detector and provenance values must never enter rewrite prompts, convergence criteria, or candidate ranking.
-- Do not expose watermark-removal, detector-evasion, or named-detector optimization tools.
+- Official provenance verification and external detector observations use configured integrations. Keep raw responses and credentials out of prompts.
+- Default writing excludes detector values. Explicit opt-in detector-aware refinement may use a validated vendor summary after protected-content and voice gates; provenance remains excluded.
+- Do not expose watermark-removal tools. Experimental detector-aware refinement must be explicit, bounded, vendor-specific and report its limitations.
 - Preserve schema versions, explicit `unavailable`/`unsupported` states, warnings, and limitations from the core.
 
 ## Tool surface
@@ -127,6 +127,8 @@ Input:
 
 `voice_profile`, `persona`, and `semantic_constraints` are optional; `provider.name` is required for a network rewrite. `credential_ref` is an opaque server-side reference and must never be echoed.
 
+The implemented core also accepts `voiceSamples` for bounded prose context (up to three excerpts, 8,000 characters total) and `voiceTargetScore` (default 80, range 0–100). A future transport should disclose sample transmission to the chosen provider. Saved profiles contain features, not excerpts. Rewriting reports `voiceRefinement` with initial/selected scores, target status and stopping reason; below-target results stay review-required. This is an operational target, not an authorship probability. Semantic and completion gates retain priority over voice.
+
 Output:
 
 ```json
@@ -205,7 +207,11 @@ Do not substitute `0`, `false`, or an empty object for an unavailable metric. Pr
 
 ## External detector extension
 
-External detectors are intentionally not part of the initial tool list. If a later measurement tool is added, each observation must retain:
+The core now also accepts opt-in `detectorRefinement: {apiKey, maxPasses: 1..3}` on generation and rewriting. A future transport must replace the key with a server-managed credential reference and require an explicit opt-in. Default behavior remains independent of detectors. The result includes measured before/after class probabilities and call counts; unknown or changed detector versions cannot be compared. This is an experimental vendor-specific objective, not a bypass guarantee.
+
+Generation additionally accepts `contentMode: "factual" | "fiction"` and `maxVoicePasses: 1..3`. Fiction permission affects added content only; source anchors and contradictions remain checked. `verifyGeneration` returns `permittedAdditions`, differences, source-anchor coverage and limitations separately. The outer generation result always requires review.
+
+The core/CLI now implements GPTZero detection. It is not yet registered as an MCP tool. A future `sapienize.detect` transport should accept text, a detector name and server-managed credential reference, then call `core.detect`. It must retain all three class probabilities, the raw observation, model version and timestamp. No caller should convert a mixed verdict into human text because its AI-only probability is low. Each observation retains:
 
 ```json
 {
@@ -223,6 +229,10 @@ External detectors are intentionally not part of the initial tool list. If a lat
 
 The adapter must document the detector's own scale. Normalization is for consistent storage, not a claim that different detector percentages are equivalent.
 
+## Generation extension
+
+The implemented JavaScript API is `sapienize.generate(brief, { voiceSamples, voiceProfile, sourceFacts, targetWords, provider, ...providerOptions })`. A thin future MCP tool should require a brief and one sample/profile source, use server-managed provider credentials, and pass through the generation result. It must retain `status: review_required`, `accepted: false`, completion/refusal/truncation metadata, descriptive voice comparison and source-fact check results. Without source facts, semantic integrity is `not_applicable`; a generated brief is not verified by comparison to itself. This proposal does not register a live MCP server.
+
 ## Implementation checklist
 
 1. Stabilize and export the shared core operations and JSON-safe schemas.
@@ -234,3 +244,5 @@ The adapter must document the detector's own scale. Normalization is for consist
 7. Document server installation and client configuration only after the implementation exists.
 
 Until these steps are complete, integrations should use the shared JavaScript API or CLI rather than advertising an MCP server.
+
+Repository evaluation is available through `sapienize audit <dataset> --manifest <manifest>` and `sapienize eval <dataset> --manifest <manifest> --split <name>`. These are local CLI operations, not registered MCP tools. They validate full-dataset governance and duplicate leakage before evaluating a frozen split; see `docs/evaluation-data-protocol.md` for report fields and limitations.

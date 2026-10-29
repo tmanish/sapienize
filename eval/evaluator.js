@@ -2,6 +2,8 @@
 
 const { SOURCE_TYPES, AI_INVOLVED_SOURCE_TYPES } = require("./schema.js");
 const { canonicalRecordOrder, datasetFingerprint } = require("./dataset.js");
+const { auditDatasetManifest, assertNoDuplicateLeakage, datasetManifestFingerprint } = require("./manifest.js");
+const { auditDuplicates } = require("./duplicates.js");
 const {
   DEFAULT_CALIBRATION_BINS,
   DOCUMENT_LENGTH_BUCKETS,
@@ -14,6 +16,7 @@ const {
 } = require("./metrics.js");
 
 const UNSPECIFIED_GROUP = "(unspecified)";
+const EVALUATOR_VERSION = "2.1.0";
 
 function isJsonSafeValue(value) {
   function inspect(current, ancestors) {
@@ -350,6 +353,10 @@ function analyzerFunction(analyzer) {
 
 function normalizeOptions(options) {
   const settings = options || {};
+  if (settings.seed !== undefined && typeof settings.seed !== "string" &&
+      !(typeof settings.seed === "number" && Number.isFinite(settings.seed))) {
+    throw new TypeError("seed must be a string or finite number");
+  }
   const thresholdExplicit = Object.prototype.hasOwnProperty.call(settings, "threshold");
   const threshold = thresholdExplicit ? settings.threshold : null;
   if (thresholdExplicit && (typeof threshold !== "number" || !Number.isFinite(threshold))) {
@@ -388,6 +395,66 @@ function verifyObservationIds(records, observationMap) {
   const recordIds = new Set(records.map(record => record.id));
   const unknown = Array.from(observationMap.keys()).filter(id => !recordIds.has(id)).sort();
   if (unknown.length) throw new TypeError("observations contain unknown id" + (unknown.length === 1 ? "" : "s") + ": " + unknown.join(", "));
+}
+
+function prepareEvaluation(records, options) {
+  const supplied = options || {};
+  const full = canonicalRecordOrder(records);
+  const settings = normalizeOptions(supplied);
+  const synthetic = full.every(record => record.metadata && record.metadata.synthetic === true);
+  if (supplied.manifest === undefined) {
+    if (supplied.split !== undefined) throw new TypeError("split requires a dataset manifest");
+    if (!synthetic) throw new TypeError("non-synthetic evaluation requires a dataset manifest and explicit split");
+    settings.governance = {
+      status: "synthetic_only", manifest: null, split: null,
+      fullDataset: { recordCount: full.length, fingerprint: datasetFingerprint(full) },
+      duplicateAudit: auditDuplicates(full), excludedObservationIds: []
+    };
+    return { records: full, settings };
+  }
+  const manifest = supplied.manifest;
+  // Validate and audit the entire dataset BEFORE selecting or invoking an analyzer.
+  const audit = auditDatasetManifest(manifest, full);
+  assertNoDuplicateLeakage(audit);
+  if (typeof supplied.split !== "string" || !supplied.split.trim()) {
+    throw new TypeError("manifest evaluation requires an explicit split");
+  }
+  const split = manifest.splits.find(item => item.name === supplied.split);
+  if (!split) throw new RangeError("unknown dataset split `" + supplied.split + "`");
+  const sources = new Map(manifest.sources.map(source => [source.id, source]));
+  const recordById = new Map(full.map(record => [record.id, record]));
+  for (const annotation of manifest.records) {
+    const source = sources.get(annotation.source_id);
+    if (source.consent.status === "unknown" || /^(unknown|unspecified|unlicensed)$/i.test(source.license.identifier.trim())) {
+      throw new TypeError("evaluation source `" + source.id + "` has unresolved rights or consent");
+    }
+    const record = recordById.get(annotation.id);
+    if (source.consent.status === "not_applicable_synthetic" && !(record.metadata && record.metadata.synthetic === true)) {
+      throw new TypeError("synthetic consent requires metadata.synthetic: true for `" + record.id + "`");
+    }
+  }
+  verifyObservationIds(full, settings.providedObservations);
+  const ids = new Set(split.record_ids);
+  const excludedObservationIds = Array.from(settings.providedObservations.keys()).filter(id => !ids.has(id)).sort();
+  settings.providedObservations = new Map(Array.from(settings.providedObservations).filter(([id]) => ids.has(id)));
+  settings.annotations = new Map(manifest.records.map(record => [record.id, record]));
+  settings.governance = {
+    status: synthetic ? "validated_synthetic" : "validated",
+    manifest: {
+      schemaVersion: manifest.schema_version,
+      datasetId: manifest.dataset.id,
+      datasetVersion: manifest.dataset.version,
+      fingerprint: datasetManifestFingerprint(manifest)
+    },
+    fullDataset: { recordCount: full.length, fingerprint: datasetFingerprint(full) },
+    split: {
+      name: split.name, purpose: split.purpose, recordIds: Array.from(ids).sort(),
+      policy: JSON.parse(JSON.stringify(manifest.split_policy))
+    },
+    duplicateAudit: audit,
+    excludedObservationIds
+  };
+  return { records: full.filter(record => ids.has(record.id)), settings };
 }
 
 function collectSync(records, settings) {
@@ -527,13 +594,19 @@ function buildReport(records, settings, rawObservations) {
   }
   const externalDetector = detectorKeys.size ? Array.from(detectorKeys.values())[0] : null;
   const rows = records.map(record => {
+    const annotation = settings.annotations && settings.annotations.get(record.id);
     const hasObservation = rawObservations.has(record.id) && rawObservations.get(record.id) !== undefined && rawObservations.get(record.id) !== null;
     const normalized = normalizeObservation(record.id, rawObservations.get(record.id), settings.threshold);
     return Object.assign({
       id: record.id,
       sourceType: record.source_type,
-      domain: record.domain || UNSPECIFIED_GROUP,
-      model: record.model || UNSPECIFIED_GROUP,
+      domain: record.domain || (annotation && annotation.domain) || UNSPECIFIED_GROUP,
+      model: record.model || (annotation && annotation.generation && annotation.generation.model) || UNSPECIFIED_GROUP,
+      language: annotation && annotation.language || UNSPECIFIED_GROUP,
+      author: annotation && annotation.author_group || record.author_id || UNSPECIFIED_GROUP,
+      modelVersion: annotation && annotation.generation
+        ? JSON.stringify([annotation.generation.provider, annotation.generation.model, annotation.generation.version])
+        : UNSPECIFIED_GROUP,
       documentLength: documentLengthBucket(record.text, settings.lengthBuckets),
       actualAi: positive.has(record.source_type),
       hasObservation
@@ -565,6 +638,8 @@ function buildReport(records, settings, rawObservations) {
 
   return {
     schemaVersion: 1,
+    evaluatorVersion: EVALUATOR_VERSION,
+    governance: settings.governance,
     configuration: {
       threshold: settings.threshold,
       thresholdExplicit: settings.thresholdExplicit,
@@ -601,6 +676,10 @@ function buildReport(records, settings, rawObservations) {
       semanticPreservation: semantic.value,
       perDomain: groupRows(rows, row => row.domain),
       perModel: groupRows(rows, row => row.model),
+      perSourceType: groupRows(rows, row => row.sourceType),
+      perLanguage: groupRows(rows, row => row.language),
+      perAuthor: groupRows(rows, row => row.author),
+      perModelVersion: groupRows(rows, row => row.modelVersion),
       perDocumentLength: groupRows(rows, row => row.documentLength)
     },
     metricAvailability: {
@@ -628,14 +707,12 @@ function buildReport(records, settings, rawObservations) {
 }
 
 function evaluateDataset(records, options) {
-  const orderedRecords = canonicalRecordOrder(records);
-  const settings = normalizeOptions(options);
+  const { records: orderedRecords, settings } = prepareEvaluation(records, options);
   return buildReport(orderedRecords, settings, collectSync(orderedRecords, settings));
 }
 
 async function evaluateDatasetAsync(records, options) {
-  const orderedRecords = canonicalRecordOrder(records);
-  const settings = normalizeOptions(options);
+  const { records: orderedRecords, settings } = prepareEvaluation(records, options);
   return buildReport(orderedRecords, settings, await collectAsync(orderedRecords, settings));
 }
 
@@ -654,6 +731,7 @@ class Evaluator {
 }
 
 module.exports = {
+  EVALUATOR_VERSION,
   UNSPECIFIED_GROUP,
   normalizeObservation,
   evaluateDataset,

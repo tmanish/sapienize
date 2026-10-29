@@ -222,7 +222,7 @@ async function withTempDirectory(fn) {
   await test("eval accepts JSONL plus observation JSON", () => withTempDirectory(async directory => {
     fs.writeFileSync(path.join(directory, "dataset.jsonl"), JSON.stringify({
       id: "one", text: "A small public fixture.", source_type: "human",
-      domain: "__proto__", model: "constructor"
+      domain: "__proto__", model: "constructor", metadata: { synthetic: true }
     }) + "\n");
     fs.writeFileSync(path.join(directory, "observations.json"), JSON.stringify({
       one: { predictedAi: false, aiScore: 0.1 }

@@ -21,7 +21,9 @@
 
   function dynamicTokenBudget(wordCount) {
     var words = Number.isFinite(wordCount) ? Math.max(0, wordCount) : 0;
-    return Math.min(8000, Math.max(1200, Math.round(words * 2.2) + 400));
+    // Reasoning and visible prose can share the output budget. Leave headroom
+    // without retrying paid requests automatically. The keyless path stays 1000.
+    return Math.min(16000, Math.max(4096, Math.round(words * 3) + 2048));
   }
 
   function withTimeout(promise, ms) {
