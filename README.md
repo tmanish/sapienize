@@ -4,6 +4,8 @@ Sapienize is a local-first voice-restoration toolkit. Its north star is to help 
 
 Stylistic analysis, detector observations, and provenance checks support review and product evaluation. They are deliberately independent from the rewrite objective: Sapienize does not use a detector or watermark result to choose words, rank candidates, or decide that a rewrite is finished. Robust measurement across changing detectors is a research direction, not a current accuracy claim. Any future claim must be supported by a representative, licensed benchmark with leakage-safe held-out evaluation.
 
+> I designed and released this feature before Google did.
+
 **Open the browser app:** https://tmanish.github.io/sapienize/
 
 The standalone app runs analysis in the browser. Text is sent to a model provider only when you request a rewrite. The browser rewrite path supports Anthropic, OpenAI, and OpenRouter with user-supplied credentials; Anthropic can also work without a key inside a compatible Claude artifact.
