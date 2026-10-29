@@ -10,6 +10,7 @@ This is the host-readable companion to the executable `SAPIENIZE_TELLS` library.
 - [Voice and document-integrity observations](#4-voice-and-document-integrity-observations)
 - [What not to change automatically](#5-what-not-to-change-automatically)
 - [2026 additions](#6-2026-additions)
+- [October 2026 additions](#7-october-2026-additions)
 
 The legacy severity value is a review-priority weight used by the backward-compatible style heuristic:
 
@@ -27,18 +28,18 @@ Severity is not statistical confidence or probability. A finding may be intentio
 | tapestry / rich tapestry | 3 | mix, range, variety |
 | a testament to | 3 | shows, proves |
 | ever-evolving | 3 | changing, or cut |
-| in today's fast-paced / digital / modern world | 3 | cut the opener; start with the point |
-| navigate the complexities / landscape | 3 | handle, deal with, work through |
+| in today's fast-paced / digital / modern / interconnected / competitive world | 3 | cut the opener; start with the point |
+| navigate the complexities / landscape / intricacies / nuances | 3 | handle, deal with, work through |
 | game-changer | 3 | name the specific change |
 | treasure trove | 3 | a lot of, a stack of |
 | double-edged sword | 3 | state the tradeoff directly |
 | paradigm shift | 3 | big change, then say what changed |
 | unlock the potential / power | 3 | say what becomes possible |
-| it's important to note that / it's worth noting | 3 | delete; note the thing directly |
+| it's important to note / worth noting / essential to remember that | 3 | delete; note the thing directly |
 | it should be noted that | 3 | delete |
 | seamless / seamlessly | 3 | smooth, without extra steps |
 | synergy / synergistic | 3 | say how the parts help each other |
-| stands as a | 3 | is |
+| stands as a / an | 3 | is |
 | plays a vital / crucial / pivotal role | 3 | does X, matters because |
 | in the realm / world / landscape of | 3 | in |
 | plethora | 3 | plenty, a lot |
@@ -50,9 +51,9 @@ Severity is not statistical confidence or probability. A finding may be intentio
 | cannot be overstated | 3 | state it at normal volume |
 | actionable insights | 3 | things you can act on, or name one |
 | without further ado | 3 | cut |
-| elevate your | 3 | improve, sharpen |
-| leverage (verb) | 2 | use |
-| foster | 2 | build, encourage |
+| elevate your / our / the | 3 | improve, sharpen |
+| leverage (verb only; the noun is not flagged) | 2 | use |
+| foster (verb; foster care, parents, and homes are not flagged) | 2 | build, encourage |
 | pivotal | 2 | key, decisive |
 | cutting-edge / state-of-the-art | 2 | new, latest, or name the technique |
 | revolutionize / transformative | 2 | change; say into what |
@@ -63,7 +64,7 @@ Severity is not statistical confidence or probability. A finding may be intentio
 | showcase | 2 | show |
 | holistic | 2 | whole, end-to-end |
 | myriad | 2 | many |
-| underscore | 2 | show, highlight |
+| underscore (verb; the `_` character is not flagged) | 2 | show, highlight |
 | dive into / deep dive | 2 | look at, close look |
 | let's explore | 2 | here's how X works |
 | at its core / in essence | 2 | basically, or cut |
@@ -72,7 +73,7 @@ Severity is not statistical confidence or probability. A finding may be intentio
 | a wide range / array / variety of | 2 | many, or list three |
 | needless to say | 2 | cut |
 | comprehensive guide | 2 | guide |
-| serves as a | 2 | is, works as |
+| serves as a / an | 2 | is, works as |
 | vibrant / bustling | 2 | describe what you actually see |
 | meticulous / intricate | 2 | careful, detailed |
 | fast-paced | 2 | cut, or name the actual speed |
@@ -92,7 +93,7 @@ Severity is not statistical confidence or probability. A finding may be intentio
 ## 2. Structural signals
 
 - **"Not only X, but also Y"** (sev 2): split into two claims or keep the stronger one.
-- **"It's not just X; it's Y"** (sev 3): state Y directly.
+- **"It's not just X; it's Y"** (sev 3): also caught when the halves are joined by an em dash or split across a period ("It's not a tool. It's a mindset."). State Y directly.
 - **"Whether you're a X or a Y"** (sev 3): pick one reader and write to them.
 - **"In conclusion / In summary"** (sev 3/2): just conclude.
 - **Rule-of-three density** (sev 2): repeated "X, Y, and Z" constructions can sound templated. Compare the frequency with the authentic profile and revise only when it is out of character or obscures the point.
@@ -103,7 +104,7 @@ Severity is not statistical confidence or probability. A finding may be intentio
 ## 3. Rhythm signals
 
 - **Low sentence-length variation** (sev 3): sentence lengths barely vary. Report the measured distribution and compare it with the authentic profile; do not manufacture a short/long sentence quota when the author's cadence is genuinely even.
-- **Moreover / Furthermore / Additionally / In addition sentence openers** (sev 2): use and, also, plus, or no connector.
+- **Moreover / Furthermore / Additionally / In addition sentence openers** (sev 2): matched when capitalized at the start of any sentence, not only at the start of a line. Use and, also, plus, or no connector.
 - **Monotone stretches** (sev 2): 3+ consecutive sentences within a few words of the same length. Break one.
 - **Repeated openers** (sev 1): 3+ sentences starting with the same non-trivial word.
 - **"However, it is..."** (sev 1): but it's.
@@ -179,3 +180,52 @@ Patterns added to the curated library during 2025-2026 maintenance. They have no
 | stark reminder | 2 | reminder, or state the fact |
 | crucially, | 2 | cut; the sentence should show it |
 | optimize / journey / ecosystem / landscape / resonate / grapple with / arguably / notably / importantly / in a nutshell / silver bullet / table stakes / pro tip: / spoiler: | 1 | weak signals; fix on repetition, keep when domain-correct |
+
+## 7. October 2026 additions
+
+Added after reviewing false positives and recurring misses in the existing library. As with section 6, these are review prompts, not calibrated evidence of model generation.
+
+**Chat-assistant residue (category `residue`)**
+
+These phrases usually survive when text is pasted out of a chat assistant's reply. They say nothing about whether the surrounding prose is the author's; they mean a conversational wrapper was left in. Confirm with the author before deleting, and never treat them as proof of authorship.
+
+| Tell | Sev | Replace with |
+|---|---|---|
+| as an AI language model | 3 | delete the disclaimer |
+| as of my last knowledge update / cutoff | 3 | delete it and check the fact against a current source |
+| great / excellent question | 3 | cut; answer the question |
+| you're absolutely right | 2 | cut, or say what was right |
+| Certainly! / Absolutely! / Of course! (at line start) | 2 | cut; start with the content |
+| I'd be happy to help | 2 | cut, or offer something specific |
+| don't hesitate to reach out | 2 | say how to reach you, once |
+| let me know if you have any... | 1 | fine in email; elsewhere cut |
+| feel free to | 1 | give the instruction, or cut |
+
+**Framing and signposting (structure)**
+
+| Tell | Sev | Replace with |
+|---|---|---|
+| imagine a world / future | 3 | describe the concrete case |
+| in this article, we will | 2 | start with the first real point |
+| let's break it down / let's unpack | 2 | just explain it |
+| not just X, but Y | 2 | state Y directly |
+| think of it as | 1 | keep only if the comparison explains something |
+
+**Vocabulary (lexical)**
+
+| Tell | Sev | Replace with |
+|---|---|---|
+| a symphony of | 3 | a mix of, or list what's there |
+| indelible mark / impression | 3 | say what lasted |
+| ever-changing | 2 | changing, or cut |
+| rapidly evolving | 2 | say what changed and when |
+| shed light on | 2 | explain, show |
+| pave the way | 2 | make X possible, and say how |
+| the intricacies of | 2 | the details of, or name one |
+| valuable / invaluable insights | 2 | state the insight |
+| tailored to your needs | 2 | say what is adjusted and for whom |
+| unwavering | 2 | steady, or show the evidence |
+| labyrinth / labyrinthine | 2 | confusing, complicated |
+| captivating | 2 | say what holds attention |
+| nuanced understanding / approach | 2 | name the nuance |
+| garner / in the grand scheme of things | 1 | get, earn / overall, or cut |
