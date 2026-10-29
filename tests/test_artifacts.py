@@ -42,6 +42,9 @@ with zipfile.ZipFile(ROOT / "sapienize.skill") as archive:
         if source.suffix.lower() in TEXT_SUFFIXES:
             assert b"\r\n" not in member, f"{name} must use reproducible LF endings"
 
+# Check before rebuilding: build.py regenerates these tables and would mask drift.
+subprocess.run(["node", str(ROOT / "src/analysis/tell-reference.js"), "--check", str(ROOT / "skill/sapienize/references/tells.md")], cwd=ROOT, check=True)
+
 committed = (digest(ROOT / "sapienize.html"), digest(ROOT / "sapienize.skill"))
 subprocess.run([sys.executable, str(ROOT / "build.py")], cwd=ROOT, check=True, stdout=subprocess.DEVNULL)
 first_build = (digest(ROOT / "sapienize.html"), digest(ROOT / "sapienize.skill"))

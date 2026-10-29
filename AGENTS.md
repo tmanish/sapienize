@@ -39,6 +39,7 @@ Authoritative source files:
 - `src/provenance/`: document-integrity inspection and official provenance-verifier boundaries.
 - `src/core/`: provider-neutral public API and structured result validation.
 - `src/engine.js`: backward-compatible v1 facade and executable `SAPIENIZE_TELLS` library.
+- `src/analysis/tell-reference.js`: Node-only renderer for the generated tables in `tells.md`.
 - `src/sapienize_shell.html`: browser UI, styles, and browser workflow.
 - `eval/`: dataset and governance-manifest validation, metrics, evaluator, and non-private fixtures.
 - `skill/sapienize/`: Claude skill source and host-readable stylistic reference.
@@ -50,10 +51,11 @@ Generated release artifacts:
 
 - `sapienize.html` is assembled from `src/sapienize_shell.html` and the browser-safe modules listed by `build.py`.
 - `sapienize.skill` is a zip archive generated from `skill/sapienize/`.
+- The phrase tables between the `GENERATED: SAPIENIZE_TELLS` markers in `skill/sapienize/references/tells.md` are rendered from `src/engine.js`.
 
 **Never edit `sapienize.html` or `sapienize.skill` directly.** Change their sources and run `npm run build`. Commit regenerated artifacts when the release files are expected to change.
 
-The tell library currently has two maintained representations: executable entries in `src/engine.js` and their human/host counterparts in `skill/sapienize/references/tells.md`. Keep executable labels, severities, and interpretations aligned. Reference-only advice must be explicitly marked `Manual/context-only`. Severity is review priority inside the legacy heuristic, not confidence of AI authorship.
+`SAPIENIZE_TELLS` in `src/engine.js` is the single source of truth for the tell library. Every entry carries `examples: { hit: [...], miss: [...] }`: each hit must surface with that label in `analyzeText`, each miss must not, and context-sensitive entries need at least one miss. `npm run build` renders the phrase tables in `skill/sapienize/references/tells.md` from the engine through `src/analysis/tell-reference.js`; never edit the generated block by hand. The rest of `tells.md` (document-level signals and explicitly marked `Manual/context-only` advice) stays hand-written. Severity is review priority inside the legacy heuristic, not confidence of AI authorship.
 
 ## Result boundaries
 

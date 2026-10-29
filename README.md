@@ -176,7 +176,7 @@ npm run eval -- eval/fixtures/public-synthetic.jsonl
 
 `npm test` first checks that generated artifacts match their sources, then verifies that rebuilding is byte-for-byte reproducible. After changing `src/` or `skill/`, run `npm run build` before the suite; never patch the generated HTML or skill archive directly.
 
-The executable tell library currently has two maintained representations: entries in `src/engine.js` and their host-readable counterparts in `skill/sapienize/references/tells.md`. Keep executable labels, severities, and guidance aligned until they are generated from one shared data file; reference-only advice must be explicitly marked `Manual/context-only`.
+The tell library lives in one place: `SAPIENIZE_TELLS` in `src/engine.js`. Each entry includes hit and miss examples that the test suite runs, and `npm run build` generates the phrase tables in `skill/sapienize/references/tells.md` from it. A stale table fails the tests. Hand-written advice in that file is marked `Manual/context-only`.
 
 ## Limitations and safety
 

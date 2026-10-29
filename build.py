@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """Build the two shippable artifacts from source:
   sapienize.html   <- src/sapienize_shell.html + browser-safe shared modules
-  sapienize.skill  <- skill/sapienize/
+  sapienize.skill  <- skill/sapienize/ (tells.md tables regenerated from src/engine.js)
 Run after any edit to src/ or skill/, then run the tests."""
-import re, pathlib, zipfile
+import re, pathlib, subprocess, zipfile
 
 root = pathlib.Path(__file__).parent
 TEXT_SUFFIXES = {".html", ".js", ".json", ".md", ".txt", ".yaml", ".yml"}
@@ -51,6 +51,10 @@ bundle = "\n\n".join(read_lf_text(root / path) for path in BROWSER_MODULES)
 html = shell.replace('/*__ENGINE__*/', bundle)
 (root / "sapienize.html").write_bytes(html.encode("utf-8"))
 scripts = re.findall(r'<script>(.*?)</script>', html, re.S)
+
+# The phrase tables in tells.md are rendered from SAPIENIZE_TELLS so the skill
+# reference cannot drift from the executable library.
+subprocess.run(["node", "src/analysis/tell-reference.js", "--write", "skill/sapienize/references/tells.md"], cwd=root, check=True)
 
 with zipfile.ZipFile(root / "sapienize.skill", "w", zipfile.ZIP_STORED) as z:
     for p in sorted((root / "skill/sapienize").rglob("*")):

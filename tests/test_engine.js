@@ -57,6 +57,37 @@ SAPIENIZE_TELLS.forEach(t => {
 });
 assert(seenLabels.size === SAPIENIZE_TELLS.length, "tell library entries are unique and well-formed (" + SAPIENIZE_TELLS.length + ")");
 
+// Every entry carries its own fixtures: each hit surfaces with that label after
+// overlap resolution, and no miss does.
+const contextSensitive = ["foster", "leverage (verb)", "underscore", "significant"];
+let exampleCount = 0;
+SAPIENIZE_TELLS.forEach(t => {
+  const ex = t.examples || {};
+  if (!Array.isArray(ex.hit) || ex.hit.length === 0) assert(false, "tell has no hit example: " + t.label);
+  if (contextSensitive.indexOf(t.label) !== -1 && !(Array.isArray(ex.miss) && ex.miss.length)) assert(false, "context-sensitive tell has no miss example: " + t.label);
+  (ex.hit || []).forEach(text => {
+    exampleCount++;
+    const got = analyzeText(text).inline.map(f => f.label);
+    if (got.indexOf(t.label) === -1) assert(false, "hit example is not flagged as '" + t.label + "': " + JSON.stringify(text) + " -> " + JSON.stringify(got));
+  });
+  (ex.miss || []).forEach(text => {
+    exampleCount++;
+    if (analyzeText(text).inline.some(f => f.label === t.label)) assert(false, "miss example is flagged as '" + t.label + "': " + JSON.stringify(text));
+  });
+});
+assert(exampleCount > SAPIENIZE_TELLS.length, "every tell's hit/miss examples behave as documented (" + exampleCount + " examples)");
+
+// tells.md tables are generated from SAPIENIZE_TELLS; a stale copy fails here.
+const fs = require("fs");
+const path = require("path");
+const { spliceTellReference } = require("../src/analysis/tell-reference.js");
+const tellsMd = fs.readFileSync(path.join(__dirname, "../skill/sapienize/references/tells.md"), "utf8").replace(/\r\n?/g, "\n");
+assert(spliceTellReference(tellsMd, SAPIENIZE_TELLS) === tellsMd, "tells.md phrase tables match SAPIENIZE_TELLS (run npm run build if this fails)");
+SAPIENIZE_TELLS.forEach(t => {
+  const row = "| " + t.label.replace(/\|/g, "\\|") + " | " + t.sev + " |";
+  if (tellsMd.indexOf(row) === -1) assert(false, "tells.md is missing the row for '" + t.label + "' at sev " + t.sev);
+});
+
 const flags = (text, label) => analyzeText(text).inline.some(f => f.label === label);
 // Pattern fixes
 assert(flags("The tool is fine. Moreover, it is cheap.", "Moreover/Furthermore/Additionally opener"), "Moreover opener is caught mid-paragraph, not only at line start");
