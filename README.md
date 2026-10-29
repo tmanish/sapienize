@@ -18,6 +18,41 @@ The standalone app runs analysis in the browser. Text is sent to a model provide
 
 To use Anthropic's keyless artifact path, attach `sapienize.html` to a Claude.ai chat and ask Claude to render it as an artifact. On the hosted page or from a local file, use **API settings** and supply your own provider credential.
 
+### Use the web app
+
+Scanning needs no account or key. Open the hosted app (or the downloaded `sapienize.html`), paste a draft, and select **Run forensics**. Everything in the scan runs in your browser.
+
+Rewriting calls a model, so it needs one of these:
+
+- **Your own API key.** Select **API settings**, pick a provider, and paste a key. Get one from the [Anthropic Console](https://console.anthropic.com/), [OpenAI](https://platform.openai.com/api-keys), or [OpenRouter](https://openrouter.ai/keys). The provider bills you for each rewrite. Default models are `claude-sonnet-4-6`, `gpt-4o-mini`, and `openai/gpt-4o-mini`; you can type any model name your key can use. The key stays in memory for that tab. It isn't saved, and it's sent only to the provider you picked.
+- **No key, inside Claude.** Attach `sapienize.html` to a claude.ai chat and ask Claude to open it as an artifact. Rewrites then run on your Claude plan. This path caps the response at 1,000 tokens, so drafts over roughly 650 words can come back cut off; split long pieces into sections or use a key. It only works inside an artifact, not on the hosted page.
+
+The [browser workflow](#browser-workflow) below covers the rest: adding a voice sample, rewriting, and reviewing the changes.
+
+### Install the skill
+
+`sapienize.skill` is a zip file holding a `sapienize/` folder with `SKILL.md` and `references/tells.md`.
+
+**Claude apps (web, desktop, and Claude Code on the same account).** Skills must be enabled for your account.
+
+1. Download [`sapienize.skill`](https://github.com/tmanish/sapienize/raw/main/sapienize.skill).
+2. In claude.ai, open **Settings → Capabilities → Skills** and upload the file.
+3. Start a new chat and ask Claude to "sapienize this draft." The desktop app and Claude Code pick up the skill from your account the next time they sync.
+
+**Claude Code only, without uploading to your account.** Unzip it into your personal skills folder:
+
+```bash
+mkdir -p ~/.claude/skills && unzip -o sapienize.skill -d ~/.claude/skills/
+```
+
+To share it with one project instead, unzip it into that project's `.claude/skills/` folder. Start a new Claude Code session and type `/sapienize` to check it's loaded.
+
+Use one of these, not both. A local copy doesn't update when you upload a new version to your account, so you'd end up with two skills and one of them stale.
+
+### Update the skill
+
+Download the latest `sapienize.skill` and repeat the same install step: upload it again in **Settings → Capabilities → Skills**, or unzip it again over the local copy. Skills load when a chat or session starts, so open a new one afterward.
+
 ## What the results mean
 
 | Result | Question it answers | Current status | What it does not mean |
